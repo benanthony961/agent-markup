@@ -16,6 +16,8 @@ function detail(c: Change): (Node | string)[] {
       return [c.snippet ? `“${truncate(c.snippet, 90)}”` : `<${c.tag}>`];
     case "note":
       return [`“${truncate(c.note, 140)}”`];
+    case "highlight":
+      return [h("mark", { class: "hl-quote" }, truncate(c.quote.replace(/\s+/g, " ").trim(), 90)), c.note ? ` — ${truncate(c.note, 110)}` : ""];
     case "move":
       return [`“${truncate(c.snippet || c.tag, 40)}” ${c.position} “${truncate(c.targetSnippet || "sibling", 40)}”`];
   }
@@ -35,8 +37,8 @@ function pagePath(url: string): string {
   }
 }
 
-const KIND_LABEL: Record<Change["type"], string> = { edit: "Edit text", remove: "Remove", note: "Note", move: "Move" };
-const KIND_ICON: Record<Change["type"], string> = { edit: ICONS.edit, remove: ICONS.remove, note: ICONS.note, move: ICONS.move };
+const KIND_LABEL: Record<Change["type"], string> = { edit: "Edit text", remove: "Remove", note: "Note", move: "Move", highlight: "Highlight" };
+const KIND_ICON: Record<Change["type"], string> = { edit: ICONS.edit, remove: ICONS.remove, note: ICONS.note, move: ICONS.move, highlight: ICONS.highlight };
 
 export function createPanel() {
   const count = h("span", { class: "count" }, "0");
@@ -58,6 +60,11 @@ export function createPanel() {
   const redoBtn = h("button", { class: "btn quiet", title: "Redo (⌘/Ctrl+Shift+Z)", html: ICONS.redo + "<span>Redo</span>" });
   const clearBtn = h("button", { class: "btn danger" }, "Clear all");
   const copyBtn = h("button", { class: "btn primary copy" });
+  const sendBtn = h("button", {
+    class: "btn send",
+    title: "Save everything as a JSON file in Downloads, for your agent to read",
+    html: ICONS.send + "<span>Send to agent</span>",
+  });
   const copyHelp = h("div", { class: "copy-help", role: "status" });
   const body = h(
     "div",
@@ -65,6 +72,7 @@ export function createPanel() {
     list,
     h("div", { class: "tools" }, undoBtn, redoBtn, h("span", { class: "grow" }), clearBtn),
     copyBtn,
+    sendBtn,
     copyHelp,
     h("div", { class: "foot", html: "Hold <kbd>Alt</kbd> to use the page normally" }),
   );
@@ -89,6 +97,11 @@ export function createPanel() {
     dismissUndo();
     undoOffer = { count, after: store.get().changes, timer: window.setTimeout(() => (dismissUndo(), rerender()), 8000) };
     rerender();
+  });
+
+  sendBtn.addEventListener("click", async () => {
+    const res = await executeCommand("export_markup");
+    if (!res.ok) flashCopy({ label: "Send failed", kind: "error", help: res.error ?? "Could not save the file." });
   });
 
   let copyTimer = 0;
@@ -186,6 +199,7 @@ export function createPanel() {
     setDisabled(undoBtn, !s.canUndo);
     setDisabled(redoBtn, !s.canRedo);
     setDisabled(clearBtn, n === 0);
+    setDisabled(sendBtn, n === 0);
     copyBtn.classList.toggle("done", copyState?.kind === "done");
     copyBtn.classList.toggle("error", copyState?.kind === "error");
     copyBtn.replaceChildren(
@@ -252,6 +266,9 @@ export function createPanel() {
             h("span", { class: "k-icon", html: KIND_ICON[c.type] }),
             KIND_LABEL[c.type],
             h("span", { class: "where" }, `<${c.tag}>`),
+            "category" in c && c.category
+              ? h("span", { class: "cat" }, s.settings.categories.find((k) => k.id === c.category)?.label ?? c.category)
+              : "",
             here && !found ? h("span", { class: "flag" }, "Not on page") : "",
           ),
           h("div", { class: "detail" }, ...detail(c)),

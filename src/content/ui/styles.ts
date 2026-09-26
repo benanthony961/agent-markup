@@ -167,6 +167,33 @@ kbd {
 .note-editor .row { display: flex; gap: 6px; align-items: center; margin-top: 10px; }
 .note-editor .row .spacer { flex: 1; display: inline-flex; align-items: center; gap: 3px; color: var(--color-ink-3); font-size: 11.5px; }
 
+/* ---- Categories, highlights and the send button ---- */
+.note-editor select {
+  display: block; width: 100%; height: 30px; margin: 0 0 8px; padding: 0 8px;
+  font: inherit; font-size: 12.5px; color: var(--color-ink);
+  background: var(--color-bg-raised); border: 0; border-radius: 7px; box-shadow: inset 0 0 0 1px var(--color-line);
+}
+.note-editor .quote {
+  margin: 0 0 8px; padding: 6px 8px; border-radius: 7px; font-size: 12px; line-height: 1.45; color: var(--color-ink-2);
+  background: rgba(250, 204, 21, 0.16); box-shadow: inset 3px 0 0 rgba(250, 204, 21, 0.9);
+  max-height: 72px; overflow: auto;
+}
+.hl-chip {
+  position: fixed; top: 0; left: 0; display: none; pointer-events: auto; height: 28px; padding: 0 10px; gap: 6px;
+  align-items: center; border-radius: 8px; font-weight: 600; font-size: 12px;
+  background: var(--color-light); color: var(--color-on-light); box-shadow: var(--shadow-float);
+}
+.hl-chip.show { display: inline-flex; }
+.hl-chip svg { color: var(--color-on-light); }
+.pin.hl { background: rgb(250, 204, 21); color: #3b2f00; }
+.item .cat {
+  margin-left: 4px; padding: 1px 6px; border-radius: 5px; font-size: 10.5px; font-weight: 600;
+  background: var(--color-count-bg); color: var(--color-count-ink);
+}
+.item .k-highlight .k-icon { color: rgb(202, 138, 4); }
+.item .hl-quote { background: rgba(250, 204, 21, 0.35); color: inherit; border-radius: 3px; padding: 0 2px; }
+.panel .send { margin: 6px 8px 0; height: 32px; font-size: 12.5px; font-weight: 600; gap: 8px; flex: none; }
+
 /* ---- Buttons ---- */
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 11px;

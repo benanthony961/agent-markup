@@ -1,6 +1,8 @@
 // Content script entry. Injected on demand by the background worker.
 import { getToolDefinitions } from "../commands/definitions";
 import { isCommandMessage, PING_MESSAGE, STATE_MESSAGE, TOGGLE_MESSAGE } from "../shared/messages";
+import { loadSettings, normalizeSettings, SETTINGS_KEY } from "../shared/settings";
+import { startBridge } from "./bridge";
 import { executeCommand, onCommand } from "./commands";
 import { restore } from "./session";
 import { store } from "./store";
@@ -15,7 +17,15 @@ declare global {
 if (!window.__agentMarkup) {
   window.__agentMarkup = { executeCommand, getToolDefinitions, onCommand };
   createUI();
-  void restore();
+  // Settings first: categories label restored changes, and the bridge checks origins.
+  void loadSettings().then((settings) => {
+    store.set({ settings });
+    return restore();
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[SETTINGS_KEY]) store.set({ settings: normalizeSettings(changes[SETTINGS_KEY].newValue) });
+  });
+  startBridge();
 
   store.subscribe((s, prev) => {
     if (s.enabled !== prev.enabled) chrome.runtime.sendMessage({ type: STATE_MESSAGE, enabled: s.enabled }).catch(() => {});

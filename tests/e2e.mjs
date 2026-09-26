@@ -241,7 +241,7 @@ try {
   await cmd("undo");
   check("undo works for AI-triggered commands", (await plans()) === "Starter,Scale,Growth");
   const tools = await context.serviceWorkers()[0].evaluate(() => globalThis.agentMarkup.getToolDefinitions());
-  check("getToolDefinitions", tools.length === 15 && tools.every((t) => t.name && t.description && t.input_schema?.type === "object"), `${tools.length} tools`);
+  check("getToolDefinitions", tools.length === 19 && tools.every((t) => t.name && t.description && t.input_schema?.type === "object"), `${tools.length} tools`);
 
   // Dragging an only child moves its nearest ancestor with siblings (nav <a> inside <li>)
   const dragHandleTo = async (x, y) => {

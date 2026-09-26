@@ -1,11 +1,20 @@
 // Builds the prompt the user pastes into their coding agent.
 import type { Change } from "./changes";
+import { store } from "./store";
+import { tidy } from "./textAnchor";
 
 const quote = (s: string) => `"${s.replace(/\n/g, "\\n")}"`;
 const code = (s: string) => "`" + s.replace(/`/g, "'") + "`";
 
 function elementLines(c: Change): string[] {
   return [`Element: <${c.tag}> — selector: ${code(c.selector)}`, `Section: ${c.section}`];
+}
+
+/** "Category: Wording" for notes and highlights that have one. */
+function categoryLines(c: Change): string[] {
+  if (!("category" in c) || !c.category) return [];
+  const label = store.get().settings.categories.find((k) => k.id === c.category)?.label ?? c.category;
+  return [`Category: ${label}`];
 }
 
 function describe(c: Change): string[] {
@@ -15,7 +24,16 @@ function describe(c: Change): string[] {
     case "remove":
       return ["REMOVE", ...elementLines(c), ...(c.snippet ? [`Text: ${quote(c.snippet)}`] : []), `Context HTML: ${code(c.contextHtml)}`];
     case "note":
-      return ["NOTE", ...elementLines(c), ...(c.snippet ? [`Text: ${quote(c.snippet)}`] : []), `Instruction: ${quote(c.note)}`, `Context HTML: ${code(c.contextHtml)}`];
+      return ["NOTE", ...elementLines(c), ...(c.snippet ? [`Text: ${quote(c.snippet)}`] : []), ...categoryLines(c), `Instruction: ${quote(c.note)}`, `Context HTML: ${code(c.contextHtml)}`];
+    case "highlight":
+      return [
+        "HIGHLIGHT",
+        ...elementLines(c),
+        `Highlighted: ${quote(tidy(c.quote))}`,
+        `In: ${quote(tidy(c.prefix) + " [" + tidy(c.quote) + "] " + tidy(c.suffix))}`,
+        ...categoryLines(c),
+        ...(c.note ? [`Instruction: ${quote(c.note)}`] : []),
+      ];
     case "move": {
       const a = c.snippet ? ` (${quote(c.snippet)})` : "";
       const b = c.targetSnippet ? ` (${quote(c.targetSnippet)})` : "";

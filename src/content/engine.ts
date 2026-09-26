@@ -1,7 +1,8 @@
 // Applies and un-applies changes on the live DOM. Every DOM mutation Agent
 // Markup makes to the page goes through here, driven by the command layer.
-import type { Change, MoveChange } from "./changes";
+import type { Change, HighlightChange, MoveChange } from "./changes";
 import { elementOf } from "./registry";
+import { findRange } from "./textAnchor";
 
 /** What an edit replaced, restored when the edit is reverted. */
 const originalContent = new WeakMap<Element, { children: Node[] } | { text: Text; data: string }>();
@@ -9,6 +10,46 @@ const originalContent = new WeakMap<Element, { children: Node[] } | { text: Text
 const originalDisplay = new WeakMap<Element, { value: string; priority: string }>();
 /** Where a moved element sat before the move was applied. */
 const originalPlace = new WeakMap<MoveChange, { parent: Element; next: Node | null }>();
+
+// ---- Highlights ------------------------------------------------------------
+// Drawn with the CSS Custom Highlight API: the page's DOM is not wrapped or
+// modified, so a highlight can't break the page's own scripts or layout.
+
+const HIGHLIGHT_NAME = "agent-markup";
+const highlightRanges = new Map<string, Range>();
+
+function highlightRegistry(): Highlight | null {
+  if (typeof Highlight === "undefined" || !("highlights" in CSS)) return null;
+  let hl = CSS.highlights.get(HIGHLIGHT_NAME);
+  if (!hl) {
+    hl = new Highlight();
+    CSS.highlights.set(HIGHLIGHT_NAME, hl);
+    // ::highlight() must be styled from the page's own stylesheet scope.
+    const style = document.createElement("style");
+    style.setAttribute("data-agent-markup", "");
+    style.textContent = `::highlight(${HIGHLIGHT_NAME}) { background-color: rgba(250, 204, 21, 0.45); color: inherit; }`;
+    (document.head ?? document.documentElement).appendChild(style);
+  }
+  return hl;
+}
+
+/** The live range of a highlight on this page, if it could be found. */
+export const rangeOf = (changeId: string): Range | undefined => highlightRanges.get(changeId);
+
+function applyHighlight(change: HighlightChange, el: Element) {
+  unapplyHighlight(change);
+  const range = findRange(el, change);
+  if (!range) return;
+  highlightRanges.set(change.id, range);
+  highlightRegistry()?.add(range);
+}
+
+function unapplyHighlight(change: HighlightChange) {
+  const range = highlightRanges.get(change.id);
+  if (!range) return;
+  highlightRegistry()?.delete(range);
+  highlightRanges.delete(change.id);
+}
 
 export function apply(change: Change) {
   const el = elementOf(change.elementId);
@@ -39,6 +80,9 @@ export function apply(change: Change) {
     }
     case "note":
       break; // Notes are drawn as pins by the overlay; nothing changes on the page.
+    case "highlight":
+      applyHighlight(change, el);
+      break;
     case "move": {
       const target = elementOf(change.targetId);
       if (!target || !el.parentElement || !target.parentElement || el.contains(target)) return;
@@ -72,6 +116,9 @@ export function unapply(change: Change) {
       break;
     }
     case "note":
+      break;
+    case "highlight":
+      unapplyHighlight(change);
       break;
     case "move": {
       const place = originalPlace.get(change);

@@ -4,15 +4,18 @@
 import { COMMAND_DEFINITIONS, getDefinition, getToolDefinitions, type CommandName } from "../commands/definitions";
 import { validate } from "../commands/validate";
 import type { CommandResult } from "../shared/messages";
-import type { Change, EditChange, MoveChange, NoteChange, RemoveChange } from "./changes";
+import type { Change, EditChange, HighlightChange, MoveChange, NoteChange, RemoveChange } from "./changes";
 import { copyText } from "./clipboard";
 import { contextHtml, sectionOf, snippet, stableSelector, textOf } from "./describe";
+import { downloadText } from "./download";
 import * as engine from "./engine";
+import { buildMarkup, markupFilename } from "./markup";
 import { buildPrompt } from "./prompt";
 import { find, outline } from "./query";
 import { elementOf } from "./registry";
 import * as session from "./session";
 import { store } from "./store";
+import { describeRange, findRange } from "./textAnchor";
 
 class CommandError extends Error {}
 
@@ -80,16 +83,51 @@ const handlers: Record<CommandName, Handler> = {
     return { changeId: after.id };
   },
 
-  add_note({ elementId, note }: { elementId: string; note: string }) {
+  add_note({ elementId, note, category }: { elementId: string; note: string; category?: string }) {
     const el = requireElement(elementId);
     const before = session.findChange(elementId, "note") as NoteChange | undefined;
     const text = note.trim();
+    const cat = category === undefined ? before?.category : category || undefined;
     if (!before && !text) return { changed: false };
-    if (before && before.note === text) return { changed: false, changeId: before.id };
-    const after: NoteChange | null = text ? { ...(before ?? base(el, elementId)), type: "note", note: text } : null;
+    if (before && before.note === text && before.category === cat) return { changed: false, changeId: before.id };
+    const after: NoteChange | null = text
+      ? { ...(before ?? base(el, elementId)), type: "note", note: text, ...(cat ? { category: cat } : { category: undefined }) }
+      : null;
     const patch = session.patchFor(before, after);
     session.commit(text ? "Note" : "Delete note", [patch]);
     return { changed: true, changeId: patch.id };
+  },
+
+  add_highlight(p: { elementId: string; quote: string; prefix?: string; suffix?: string; note?: string; category?: string }) {
+    const el = requireElement(p.elementId);
+    const range = findRange(el, { quote: p.quote, prefix: p.prefix ?? "", suffix: p.suffix ?? "" });
+    if (!range) throw new CommandError(`"${p.quote.slice(0, 60)}" was not found in that element's text`);
+    // Record the surrounding text from the match itself, so the highlight
+    // re-anchors to this occurrence after a reload even if the caller only
+    // passed the quote.
+    const anchor = describeRange(el, range);
+    const after: HighlightChange = {
+      ...base(el, p.elementId),
+      type: "highlight",
+      ...anchor,
+      note: (p.note ?? "").trim(),
+      ...(p.category ? { category: p.category } : {}),
+    };
+    session.commit("Highlight", [session.patchFor(undefined, after)]);
+    return { changeId: after.id };
+  },
+
+  update_annotation({ changeId, note, category }: { changeId: string; note?: string; category?: string }) {
+    const before = session.changes().find((c) => c.id === changeId);
+    if (!before || (before.type !== "note" && before.type !== "highlight"))
+      throw new CommandError(`"${changeId}" is not a note or highlight`);
+    const text = note === undefined ? before.note : note.trim();
+    const cat = category === undefined ? before.category : category || undefined;
+    if (text === before.note && cat === before.category) return { changed: false, changeId };
+    // An emptied note is deleted; an emptied highlight stays as a plain highlight.
+    const after: Change | null = before.type === "note" && !text ? null : { ...before, note: text, category: cat };
+    session.commit(after ? "Edit note" : "Delete note", [session.patchFor(before, after)]);
+    return { changed: true, changeId };
   },
 
   move_element({ elementId, targetId, position }: { elementId: string; targetId: string; position: "before" | "after" }) {
@@ -169,6 +207,19 @@ const handlers: Record<CommandName, Handler> = {
     await copyText(prompt);
     store.set({ toast: { text: "Copied", at: Date.now() } });
     return { prompt, count: session.changes().length };
+  },
+
+  get_markup() {
+    return buildMarkup(session.changes());
+  },
+
+  export_markup() {
+    const list = session.changes();
+    if (!list.length) throw new CommandError("There are no changes to send yet");
+    const filename = markupFilename();
+    downloadText(filename, JSON.stringify(buildMarkup(list), null, 2));
+    store.set({ toast: { text: "Saved to Downloads", at: Date.now() } });
+    return { filename, count: list.length };
   },
 
   find_elements(params: { query?: string; text?: string; selector?: string; limit?: number }) {

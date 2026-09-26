@@ -4,6 +4,7 @@ import { executeCommand } from "../commands";
 import { snippet, stableSelector, truncate } from "../describe";
 import { elementOf, idOf } from "../registry";
 import { store } from "../store";
+import { categorySelect, fillCategories } from "./categories";
 import { editingElement, startEditing } from "./inlineEdit";
 import { h, ICONS, isHost } from "./root";
 
@@ -182,11 +183,13 @@ export function createOverlay(): Overlay {
   // ---- Note editor ----
   const noteText = h("textarea", { placeholder: "“Make this bigger”", "aria-label": "Note for your coding agent" });
   const noteTarget = h("span");
+  const noteCategory = categorySelect();
   const noteDelete = h("button", { class: "btn danger", onclick: () => saveNote("") }, "Delete note");
   const noteBox = h(
     "div",
     { class: "note-editor", role: "dialog", "aria-label": "Note" },
     h("div", { class: "title" }, "Note", noteTarget),
+    noteCategory,
     noteText,
     h(
       "div",
@@ -200,7 +203,7 @@ export function createOverlay(): Overlay {
   const saveNote = (note: string) => {
     const id = store.get().noteEditingId;
     store.set({ noteEditingId: null });
-    if (id) void executeCommand("add_note", { elementId: id, note });
+    if (id) void executeCommand("add_note", { elementId: id, note, category: noteCategory.value });
   };
   noteText.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
@@ -326,7 +329,9 @@ export function createOverlay(): Overlay {
     if (nid === prev.noteEditingId) return;
     const nel = elementOf(nid);
     if (!nid || !nel) return;
-    const existing = s.changes.find((c) => c.type === "note" && c.elementId === nid) as { note: string } | undefined;
+    const existing = s.changes.find((c) => c.type === "note" && c.elementId === nid) as { note: string; category?: string } | undefined;
+    fillCategories(noteCategory, s.settings.categories);
+    noteCategory.value = existing ? existing.category ?? "" : s.settings.categories[0]?.id ?? "";
     noteText.value = existing?.note ?? "";
     noteDelete.style.display = existing ? "" : "none";
     noteTarget.textContent = `<${nel.localName}>`;

@@ -66,6 +66,14 @@ export function createInterceptor(overlay: Overlay) {
       return;
     }
 
+    // Shift+drag selects page text for a highlight: let the browser make the
+    // selection, but keep the page's own handlers (and navigation) out of it.
+    if (me.shiftKey && e.type !== "submit" && !editingElement()) {
+      if (e.type === "click" || e.type === "dblclick" || e.type === "auxclick") e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+
     const target = pageTarget(e);
     const editing = editingElement();
     if (editing && target && editing.contains(target)) {

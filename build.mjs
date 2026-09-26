@@ -15,9 +15,10 @@ const manifest = JSON.parse(readFileSync("src/manifest.json", "utf8"));
 if (test) manifest.host_permissions = ["<all_urls>"];
 writeFileSync(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2));
 for (const size of [16, 32, 48, 128]) writeFileSync(`${outdir}/icons/icon${size}.png`, makeIcon(size));
+cpSync("src/options.html", `${outdir}/options.html`);
 
 const options = {
-  entryPoints: { background: "src/background.ts", content: "src/content/index.ts" },
+  entryPoints: { background: "src/background.ts", content: "src/content/index.ts", options: "src/options.ts" },
   outdir,
   bundle: true,
   format: "iife",
