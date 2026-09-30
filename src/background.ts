@@ -3,8 +3,14 @@
 // messages from other extension contexts to the tab's content script.
 import { getToolDefinitions } from "./commands/definitions";
 import {
+  CAPTURE_MESSAGE,
   COMMAND_MESSAGE,
+  FRAMES_DELETE_MESSAGE,
+  FRAMES_MESSAGE,
   PING_MESSAGE,
+  RESULT_MESSAGE,
+  ROUTE_SEND_MESSAGE,
+  SEND_MESSAGE,
   STATE_MESSAGE,
   TOGGLE_MESSAGE,
   TOOLS_MESSAGE,
@@ -12,7 +18,43 @@ import {
   type CommandResult,
 } from "./shared/messages";
 
+declare const __RECEIVER__: string;
+const RECEIVER_URL = `${__RECEIVER__}/markup`;
+const RESULT_URL = `${__RECEIVER__}/result/`;
+const ROUTE_URL = `${__RECEIVER__}/route`;
 const ENABLED_KEY = "enabledTabs";
+const OPTED_OUT_KEY = "optedOutTabs";
+// Dev servers where Agent Markup turns itself on when the page loads. Deliberately
+// specific: auto-enabling on every localhost port would swallow clicks in unrelated apps.
+// Override from the service worker console: chrome.storage.local.set({ autoHosts: ["localhost:3000"] })
+const DEFAULT_AUTO_HOSTS = ["localhost:5173", "localhost:5199", "127.0.0.1:5173", "127.0.0.1:5199"];
+
+async function isAutoHost(url: string | undefined): Promise<boolean> {
+  if (!url) return false;
+  let host: string;
+  try {
+    const u = new URL(url);
+    if (u.protocol !== "http:") return false;
+    host = u.host;
+  } catch {
+    return false;
+  }
+  const { autoHosts } = await chrome.storage.local.get("autoHosts");
+  return ((autoHosts as string[] | undefined) ?? DEFAULT_AUTO_HOSTS).includes(host);
+}
+
+async function setOptedOut(tabId: number, optedOut: boolean) {
+  const data = await chrome.storage.session.get(OPTED_OUT_KEY);
+  const tabs = new Set((data[OPTED_OUT_KEY] as number[] | undefined) ?? []);
+  if (optedOut) tabs.add(tabId);
+  else tabs.delete(tabId);
+  await chrome.storage.session.set({ [OPTED_OUT_KEY]: [...tabs] });
+}
+
+async function isOptedOut(tabId: number): Promise<boolean> {
+  const data = await chrome.storage.session.get(OPTED_OUT_KEY);
+  return ((data[OPTED_OUT_KEY] as number[] | undefined) ?? []).includes(tabId);
+}
 
 async function getEnabledTabs(): Promise<number[]> {
   const data = await chrome.storage.session.get(ENABLED_KEY);
@@ -48,6 +90,7 @@ async function toggle(tabId: number) {
     const res: { enabled: boolean } = await chrome.tabs.sendMessage(tabId, { type: TOGGLE_MESSAGE });
     const [{ result: origin }] = await chrome.scripting.executeScript({ target: { tabId }, func: () => location.origin });
     if (res.enabled && origin) enabledOrigin.set(tabId, origin);
+    await setOptedOut(tabId, !res.enabled);
     await setTabEnabled(tabId, res.enabled);
   } catch (err) {
     // chrome://, the Web Store and similar pages can't be scripted.
@@ -66,9 +109,21 @@ chrome.action.onClicked.addListener((tab) => {
 // reloads; if it doesn't, the user toggles again and saved changes re-apply then.
 const enabledOrigin = new Map<number, string>();
 
-chrome.tabs.onUpdated.addListener(async (tabId, info) => {
+chrome.tabs.onUpdated.addListener(async (tabId, info, tab) => {
   if (info.status !== "complete") return;
-  if (!(await getEnabledTabs()).includes(tabId)) return;
+  if (!(await getEnabledTabs()).includes(tabId)) {
+    // Auto-on for the dev servers, unless the user turned it off on this tab.
+    if ((await isAutoHost(tab.url)) && !(await isOptedOut(tabId))) {
+      try {
+        await sendCommand(tabId, "set_enabled", { enabled: true });
+        enabledOrigin.set(tabId, new URL(tab.url!).origin);
+        await setTabEnabled(tabId, true);
+      } catch (err) {
+        console.warn("Agent Markup: could not auto-enable", err);
+      }
+    }
+    return;
+  }
   try {
     const [{ result: origin }] = await chrome.scripting.executeScript({ target: { tabId }, func: () => location.origin });
     const prev = enabledOrigin.get(tabId);
@@ -83,10 +138,76 @@ chrome.tabs.onUpdated.addListener(async (tabId, info) => {
 
 chrome.tabs.onRemoved.addListener((tabId) => void setTabEnabled(tabId, false));
 
+// ---- Route frames ------------------------------------------------------------
+// Chrome allows about two captureVisibleTab calls per second, so captures queue.
+const CAPTURE_GAP_MS = 550;
+let captureChain: Promise<unknown> = Promise.resolve();
+let lastCaptureAt = 0;
+
+async function captureInto(tabId: number, windowId: number, key: string) {
+  const wait = lastCaptureAt + CAPTURE_GAP_MS - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  // captureVisibleTab shoots whatever tab is showing; never file another tab's pixels under this route.
+  if (!(await chrome.tabs.get(tabId)).active) return { ok: false, error: "Tab not visible; frame skipped" };
+  lastCaptureAt = Date.now();
+  const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 88 });
+  const bitmap = await createImageBitmap(await (await fetch(dataUrl)).blob());
+  const size = { width: bitmap.width, height: bitmap.height };
+  bitmap.close();
+  await chrome.storage.local.set({ [key]: dataUrl });
+  return { ok: true, ...size };
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === STATE_MESSAGE && sender.tab?.id !== undefined) {
+    // Turning it off from the panel's close button counts as opting out for this tab.
+    void setOptedOut(sender.tab.id, !msg.enabled);
     void setTabEnabled(sender.tab.id, !!msg.enabled);
     return false;
+  }
+  if (msg?.type === SEND_MESSAGE) {
+    // Delivers to the local receiver (scripts/receiver.mjs). ok:false means it isn't running.
+    fetch(RECEIVER_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(msg.payload) })
+      .then(async (r) => sendResponse(r.ok ? { ok: true, ...(await r.json()) } : { ok: false, error: `receiver replied ${r.status}` }))
+      .catch(() => sendResponse({ ok: false, error: "receiver not running" }));
+    return true;
+  }
+  if (msg?.type === RESULT_MESSAGE) {
+    fetch(RESULT_URL + encodeURIComponent(String(msg.name)) + "?wait=25")
+      .then(async (r) => sendResponse(r.ok ? { ok: true, data: await r.json() } : { ok: false, status: r.status }))
+      .catch(() => sendResponse({ ok: false, status: 0 }));
+    return true;
+  }
+  if (msg?.type === CAPTURE_MESSAGE && sender.tab?.windowId !== undefined && typeof msg.key === "string") {
+    const { id: tabId, windowId } = sender.tab;
+    const run = () =>
+      captureInto(tabId!, windowId, msg.key).catch((err) => ({
+        ok: false,
+        error: /permission|activeTab|all_urls/i.test(String(err?.message ?? err))
+          ? "No screenshot access: press Alt+Shift+R twice on this tab to grant it"
+          : String(err?.message ?? err),
+      }));
+    const p = captureChain.then(run, run);
+    captureChain = p;
+    p.then(sendResponse);
+    return true;
+  }
+  if (msg?.type === FRAMES_MESSAGE && Array.isArray(msg.keys)) {
+    chrome.storage.local
+      .get(msg.keys as string[])
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((err) => sendResponse({ ok: false, error: String(err?.message ?? err) }));
+    return true;
+  }
+  if (msg?.type === FRAMES_DELETE_MESSAGE && Array.isArray(msg.keys)) {
+    chrome.storage.local.remove(msg.keys as string[]).then(() => sendResponse({ ok: true }), () => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg?.type === ROUTE_SEND_MESSAGE) {
+    fetch(ROUTE_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(msg.payload) })
+      .then(async (r) => sendResponse(r.ok ? { ok: true, ...(await r.json()) } : { ok: false, error: `receiver replied ${r.status}` }))
+      .catch(() => sendResponse({ ok: false, error: "receiver not running" }));
+    return true;
   }
   if (msg?.type === TOOLS_MESSAGE) {
     sendResponse(msg.format === "openai" ? getToolDefinitions("openai") : getToolDefinitions());

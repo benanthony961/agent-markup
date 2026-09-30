@@ -1,7 +1,7 @@
 {
   "license": "MIT",
   "name": "agent-markup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Visually edit any live website and copy a precise prompt for your coding agent.",
   "type": "module",
@@ -11,7 +11,9 @@
     "watch": "bun build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test:e2e": "bun build.mjs --test && bun tests/e2e.mjs",
-    "test:sites": "bun build.mjs --test && bun tests/real-sites.mjs"
+    "test:workflow": "bun build.mjs --test && bun tests/workflow.mjs",
+    "test:sites": "bun build.mjs --test && bun tests/real-sites.mjs",
+    "test:route": "bun build.mjs --test && bun tests/route.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.0",

@@ -67,6 +67,18 @@ function update(list: Change[]) {
   void persist(list);
 }
 
+/**
+ * Drops changes from the list without touching the page. Used once an agent has
+ * applied them to source: the page already shows (or is about to hot-reload to)
+ * the result, and reverting the DOM would fight that.
+ */
+export function dismiss(ids: string[]) {
+  if (!ids.length) return;
+  undoStack.length = 0;
+  redoStack.length = 0;
+  update(changes().filter((c) => !ids.includes(c.id)));
+}
+
 /** Applies patches, records them as one undoable step. */
 export function commit(label: string, patches: Patch[]) {
   if (!patches.length) return;

@@ -2,6 +2,7 @@
 // capture phase and turned into selections, except inside our UI or while Alt
 // is held ("browse" mode).
 import { executeCommand } from "../commands";
+import { sendAndTrack } from "../export";
 import { idOf } from "../registry";
 import { store } from "../store";
 import { cancel, editingElement, save, startEditing } from "./inlineEdit";
@@ -14,6 +15,15 @@ function isTypingTarget(e: Event): boolean {
   const t = e.composedPath()[0] as HTMLElement | undefined;
   if (!t || !(t instanceof HTMLElement)) return false;
   return t.isContentEditable || t.localName === "textarea" || (t.localName === "input" && !/^(checkbox|radio|button|submit|reset|range|color|file)$/.test((t as HTMLInputElement).type));
+}
+
+const INLINE_TAGS = new Set(["a", "abbr", "b", "br", "code", "em", "i", "mark", "s", "small", "span", "strong", "sub", "sup", "u"]);
+
+/** An element whose content is just text (plus inline formatting), so it can be edited on click. */
+function isTextElement(el: Element): boolean {
+  if (!(el instanceof HTMLElement) || /^(input|textarea|select|img|video|canvas|table|ul|ol)$/.test(el.localName)) return false;
+  if (!el.textContent?.trim()) return false;
+  return Array.from(el.children).every((c) => INLINE_TAGS.has(c.localName));
 }
 
 /** The page element an event targets, or null for <html>/<body>. SVG parts resolve to their outermost <svg>. */
@@ -32,6 +42,8 @@ function pageTarget(e: Event): Element | null {
 export function createInterceptor(overlay: Overlay) {
   let browsing = false;
   let redispatching = false;
+  /** Where the last press happened, to tell a Shift+drag (highlight) from a Shift+click (select). */
+  let pressAt = { x: 0, y: 0 };
 
   const setBrowsing = (on: boolean) => {
     if (on === browsing) return;
@@ -66,6 +78,17 @@ export function createInterceptor(overlay: Overlay) {
       return;
     }
 
+    // Shift+drag selects page text for a highlight: let the browser make the
+    // selection, but keep the page's own handlers (and navigation) out of it.
+    // A Shift+click that selected no text falls through and selects the element.
+    if (e.type === "pointerdown" || e.type === "mousedown") pressAt = { x: me.clientX, y: me.clientY };
+    const dragged = e.type === "click" && Math.hypot(me.clientX - pressAt.x, me.clientY - pressAt.y) > 4;
+    if (me.shiftKey && e.type !== "submit" && !editingElement() && (e.type !== "click" || dragged)) {
+      if (e.type === "click" || e.type === "dblclick" || e.type === "auxclick") e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+
     const target = pageTarget(e);
     const editing = editingElement();
     if (editing && target && editing.contains(target)) {
@@ -81,7 +104,10 @@ export function createInterceptor(overlay: Overlay) {
     if (e.type === "pointerdown" && editing) save();
     if (e.type === "click" && me.button === 0) {
       store.set({ noteEditingId: null });
-      void executeCommand("select_element", { elementId: target ? idOf(target) : null });
+      // Plain click on a text element edits it straight away; Shift+click only selects
+      // (for Note, Remove and the drag handle).
+      if (target && !me.shiftKey && isTextElement(target)) startEditing(idOf(target));
+      else void executeCommand("select_element", { elementId: target ? idOf(target) : null });
     }
     // Double-click is a shortcut for "Edit text".
     if (e.type === "dblclick" && me.button === 0 && target) startEditing(idOf(target));
@@ -99,6 +125,14 @@ export function createInterceptor(overlay: Overlay) {
   function onKeyDown(e: KeyboardEvent) {
     if (e.key === "Alt") {
       setBrowsing(true);
+      return;
+    }
+    // ⌘⇧Enter: save whatever is being edited, then send to the agent.
+    if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key === "Enter" && !e.isComposing) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      if (editingElement()) save();
+      void sendAndTrack();
       return;
     }
     const editing = editingElement();

@@ -11,6 +11,18 @@ export const TOGGLE_MESSAGE = "agent-markup:toggle";
 export const PING_MESSAGE = "agent-markup:ping";
 /** Content -> background: enabled state changed (for the badge). */
 export const STATE_MESSAGE = "agent-markup:state";
+/** Content -> background: deliver an export to the local receiver (the page itself can't reach it). */
+export const SEND_MESSAGE = "agent-markup:send";
+/** Content -> background: fetch the agent's result for a sent review from the receiver. */
+export const RESULT_MESSAGE = "agent-markup:result";
+/** Content -> background: screenshot the visible tab into storage under `key` (route recording). */
+export const CAPTURE_MESSAGE = "agent-markup:capture";
+/** Content -> background: read stored frames as data: URLs, by storage key. */
+export const FRAMES_MESSAGE = "agent-markup:frames";
+/** Content -> background: delete stored frames, by storage key. */
+export const FRAMES_DELETE_MESSAGE = "agent-markup:frames-delete";
+/** Content -> background: deliver a route (with frames) to the local receiver. */
+export const ROUTE_SEND_MESSAGE = "agent-markup:route-send";
 /** Any client -> background: get tool definitions. */
 export const TOOLS_MESSAGE = "agent-markup:get-tool-definitions";
 

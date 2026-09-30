@@ -2,9 +2,11 @@
 import type { Change } from "../changes";
 import { executeCommand } from "../commands";
 import { truncate } from "../describe";
+import { sendAndTrack, setAutoSend } from "../export";
 import { elementOf } from "../registry";
 import { store, type State } from "../store";
 import { h, ICONS } from "./root";
+import { createRouteBody } from "./routePanel";
 
 const PANEL_KEY = "ui:panel";
 
@@ -16,6 +18,8 @@ function detail(c: Change): (Node | string)[] {
       return [c.snippet ? `“${truncate(c.snippet, 90)}”` : `<${c.tag}>`];
     case "note":
       return [`“${truncate(c.note, 140)}”`];
+    case "highlight":
+      return [h("mark", { class: "hl-quote" }, truncate(c.quote.replace(/\s+/g, " ").trim(), 90)), c.note ? ` — ${truncate(c.note, 110)}` : ""];
     case "move":
       return [`“${truncate(c.snippet || c.tag, 40)}” ${c.position} “${truncate(c.targetSnippet || "sibling", 40)}”`];
   }
@@ -35,18 +39,22 @@ function pagePath(url: string): string {
   }
 }
 
-const KIND_LABEL: Record<Change["type"], string> = { edit: "Edit text", remove: "Remove", note: "Note", move: "Move" };
-const KIND_ICON: Record<Change["type"], string> = { edit: ICONS.edit, remove: ICONS.remove, note: ICONS.note, move: ICONS.move };
+const KIND_LABEL: Record<Change["type"], string> = { edit: "Edit text", remove: "Remove", note: "Note", move: "Move", highlight: "Highlight" };
+const KIND_ICON: Record<Change["type"], string> = { edit: ICONS.edit, remove: ICONS.remove, note: ICONS.note, move: ICONS.move, highlight: ICONS.highlight };
 
 export function createPanel() {
   const count = h("span", { class: "count" }, "0");
   const collapseBtn = h("button", { class: "icon-btn collapse", title: "Collapse", "aria-label": "Collapse panel", html: ICONS.chevron });
   const closeBtn = h("button", { class: "icon-btn", title: "Turn off Agent Markup (Alt+Shift+R)", "aria-label": "Turn off", html: ICONS.close });
+  const markupTab = h("button", { class: "mode-tab", role: "tab", title: "Edit the page and send changes to your agent" }, "Markup");
+  const routeTab = h("button", { class: "mode-tab", role: "tab", title: "Record a click-through for a walkthrough video" }, "Route");
+  markupTab.addEventListener("click", () => void executeCommand("set_mode", { mode: "markup" }));
+  routeTab.addEventListener("click", () => void executeCommand("set_mode", { mode: "route" }));
   const head = h(
     "div",
     { class: "head" },
     h("span", { class: "logo", html: ICONS.mark }),
-    h("span", { class: "name" }, "Agent Markup"),
+    h("div", { class: "modes", role: "tablist", "aria-label": "Mode" }, markupTab, routeTab),
     count,
     h("span", { class: "browse" }, "Browsing"),
     h("span", { class: "grow" }),
@@ -58,6 +66,14 @@ export function createPanel() {
   const redoBtn = h("button", { class: "btn quiet", title: "Redo (⌘/Ctrl+Shift+Z)", html: ICONS.redo + "<span>Redo</span>" });
   const clearBtn = h("button", { class: "btn danger" }, "Clear all");
   const copyBtn = h("button", { class: "btn primary copy" });
+  const sendBtn = h("button", {
+    class: "btn send",
+    title: "Send new changes to the agent (⌘⇧Enter). Saves a JSON file to Downloads if the receiver is off.",
+    html: ICONS.send + "<span>Send to agent</span>",
+  });
+  const autoBox = h("input", { type: "checkbox", id: "am-auto" }) as HTMLInputElement;
+  const autoRow = h("label", { class: "auto", for: "am-auto" }, autoBox, h("span", {}, "Auto-send after a 5s pause"));
+  autoBox.addEventListener("change", () => setAutoSend(autoBox.checked));
   const copyHelp = h("div", { class: "copy-help", role: "status" });
   const body = h(
     "div",
@@ -65,10 +81,13 @@ export function createPanel() {
     list,
     h("div", { class: "tools" }, undoBtn, redoBtn, h("span", { class: "grow" }), clearBtn),
     copyBtn,
+    sendBtn,
     copyHelp,
+    autoRow,
     h("div", { class: "foot", html: "Hold <kbd>Alt</kbd> to use the page normally" }),
   );
-  const panel = h("div", { class: "panel", role: "region", "aria-label": "Agent Markup changes" }, head, body);
+  const routeBody = createRouteBody();
+  const panel = h("div", { class: "panel", role: "region", "aria-label": "Agent Markup" }, head, body, routeBody.el);
 
   undoBtn.addEventListener("click", () => void executeCommand("undo"));
   redoBtn.addEventListener("click", () => void executeCommand("redo"));
@@ -89,6 +108,14 @@ export function createPanel() {
     dismissUndo();
     undoOffer = { count, after: store.get().changes, timer: window.setTimeout(() => (dismissUndo(), rerender()), 8000) };
     rerender();
+  });
+
+  sendBtn.addEventListener("click", async () => {
+    try {
+      await sendAndTrack();
+    } catch (err) {
+      flashCopy({ label: "Export failed", kind: "error", help: String((err as Error)?.message ?? err) });
+    }
   });
 
   let copyTimer = 0;
@@ -160,6 +187,7 @@ export function createPanel() {
   let lastChanges: Change[] | null = null;
   let lastPageKey = "";
   let lastOfferKey = 0;
+  let lastSync: State["sync"] | null = null;
   const rerender = () => {
     lastChanges = null;
     render(store.get());
@@ -172,7 +200,27 @@ export function createPanel() {
     });
     return h("li", { class: "undo-strip", role: "status" }, h("span", {}, `Cleared ${count} ${count === 1 ? "change" : "changes"}`), undo);
   };
+  let routeToastTimer = 0;
   function render(s: State) {
+    const route = s.mode === "route";
+    panel.classList.toggle("route-mode", route);
+    markupTab.setAttribute("aria-selected", String(!route));
+    routeTab.setAttribute("aria-selected", String(route));
+    if (route) {
+      count.textContent = String(s.route?.steps.filter((x) => x.kind !== "chapter").length ?? 0);
+      panel.classList.toggle("collapsed", s.panel.collapsed);
+      collapseBtn.title = s.panel.collapsed ? "Expand" : "Collapse";
+      applyPos(s.panel.x, s.panel.y, s.panel.anchor);
+      routeBody.render(s);
+      if (s.toast && s.toast.at !== lastToast) {
+        lastToast = s.toast.at;
+        panel.dataset.toast = s.toast.text;
+        clearTimeout(routeToastTimer);
+        routeToastTimer = window.setTimeout(() => delete panel.dataset.toast, 2600);
+      }
+      lastChanges = null;
+      return;
+    }
     if (s.toast && s.toast.at !== lastToast) {
       lastToast = s.toast.at;
       flashCopy({ label: s.toast.text, kind: "done" });
@@ -186,6 +234,8 @@ export function createPanel() {
     setDisabled(undoBtn, !s.canUndo);
     setDisabled(redoBtn, !s.canRedo);
     setDisabled(clearBtn, n === 0);
+    setDisabled(sendBtn, n === 0);
+    autoBox.checked = s.autoSend;
     copyBtn.classList.toggle("done", copyState?.kind === "done");
     copyBtn.classList.toggle("error", copyState?.kind === "error");
     copyBtn.replaceChildren(
@@ -198,10 +248,11 @@ export function createPanel() {
     if (undoOffer && s.changes !== undoOffer.after) dismissUndo();
 
     const offerKey = undoOffer ? undoOffer.timer : 0;
-    if (s.changes === lastChanges && s.pageKey === lastPageKey && offerKey === lastOfferKey) return;
+    if (s.changes === lastChanges && s.pageKey === lastPageKey && offerKey === lastOfferKey && s.sync === lastSync) return;
     lastChanges = s.changes;
     lastPageKey = s.pageKey;
     lastOfferKey = offerKey;
+    lastSync = s.sync;
     const strip = undoOffer ? [undoStrip(undoOffer.count)] : [];
     if (!n) {
       list.replaceChildren(
@@ -210,8 +261,8 @@ export function createPanel() {
           "li",
           { class: "empty" },
           h("div", { class: "e-title" }, "No changes yet."),
-          h("div", {}, "Click an element on the page to edit its text, remove it, add a note or move it."),
-          h("div", { class: "e-hint", html: "Double-click to edit text right away." }),
+          h("div", {}, "Click text to edit it. Shift+click an element to remove it, add a note or move it."),
+          h("div", { class: "e-hint", html: "<kbd>⌘⇧Enter</kbd> sends your changes to the agent." }),
         ),
       );
       return;
@@ -252,9 +303,14 @@ export function createPanel() {
             h("span", { class: "k-icon", html: KIND_ICON[c.type] }),
             KIND_LABEL[c.type],
             h("span", { class: "where" }, `<${c.tag}>`),
+            "category" in c && c.category
+              ? h("span", { class: "cat" }, s.settings.categories.find((k) => k.id === c.category)?.label ?? c.category)
+              : "",
             here && !found ? h("span", { class: "flag" }, "Not on page") : "",
+            s.sync[c.id] ? h("span", { class: `flag sync-${s.sync[c.id].state}`, title: s.sync[c.id].note ?? "" }, s.sync[c.id].state === "sent" ? "Sent" : "Needs your call") : "",
           ),
           h("div", { class: "detail" }, ...detail(c)),
+          s.sync[c.id]?.note ? h("div", { class: "agent-note" }, s.sync[c.id].note!) : "",
         ),
         x,
       );
