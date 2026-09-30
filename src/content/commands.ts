@@ -11,6 +11,8 @@ import * as engine from "./engine";
 import { buildPrompt } from "./prompt";
 import { find, outline } from "./query";
 import { elementOf } from "./registry";
+import { buildRoute, exportRoute, routePrompt } from "./route/export";
+import * as routeState from "./route/state";
 import * as session from "./session";
 import { store } from "./store";
 
@@ -178,6 +180,85 @@ const handlers: Record<CommandName, Handler> = {
 
   get_page_outline({ limit, includeSelectors }: { limit?: number; includeSelectors?: boolean }) {
     return outline(limit ?? 200, includeSelectors ?? false);
+  },
+
+  set_mode({ mode }: { mode: "markup" | "route" }) {
+    routeState.setMode(mode);
+    return { mode };
+  },
+
+  start_recording({ title }: { title?: string }) {
+    if (store.get().mode !== "route") routeState.setMode("route");
+    const existing = routeState.route();
+    if (!existing) store.set({ route: routeState.newRoute(title?.trim() ?? "") });
+    routeState.setRecording(true);
+    return { routeId: routeState.route()!.id, resumed: !!existing, steps: routeState.route()!.steps.length };
+  },
+
+  rename_route({ title }: { title: string }) {
+    if (!routeState.route()) store.set({ route: routeState.newRoute() });
+    routeState.mutate((r) => (r.title = title.trim()));
+    return { title: title.trim() };
+  },
+
+  stop_recording() {
+    routeState.setRecording(false);
+    return { recording: false, steps: routeState.route()?.steps.length ?? 0 };
+  },
+
+  async get_route({ includeFrames }: { includeFrames?: boolean }) {
+    const r = await buildRoute(!!includeFrames);
+    return r ? { ...r, recording: store.get().recording } : null;
+  },
+
+  update_step({ stepId, ...patch }: { stepId: string; caption?: string; note?: string; emphasis?: boolean; variable?: string; title?: string }) {
+    const step = routeState.stepById(stepId);
+    if (!step) throw new CommandError(`Unknown step "${stepId}"`);
+    const next = { ...patch };
+    if (patch.caption !== undefined) Object.assign(next, { caption: patch.caption.trim(), captionEdited: true });
+    if (patch.title !== undefined && step.kind === "chapter") Object.assign(next, { title: patch.title.trim(), caption: patch.title.trim() });
+    if (patch.note !== undefined) next.note = patch.note.trim() || undefined;
+    if (patch.variable !== undefined) next.variable = patch.variable.trim() || undefined;
+    routeState.updateStep(stepId, next);
+    return { stepId };
+  },
+
+  delete_step({ stepId }: { stepId: string }) {
+    if (!routeState.stepById(stepId)) throw new CommandError(`Unknown step "${stepId}"`);
+    routeState.mutate((r) => (r.steps = r.steps.filter((s) => s.id !== stepId)));
+    return { deleted: stepId };
+  },
+
+  add_chapter({ title, afterStepId }: { title: string; afterStepId?: string }) {
+    if (!routeState.route()) store.set({ route: routeState.newRoute() });
+    const r = routeState.route()!;
+    const at = afterStepId ? r.steps.findIndex((s) => s.id === afterStepId) + 1 : r.steps.length;
+    if (afterStepId && at === 0) throw new CommandError(`Unknown step "${afterStepId}"`);
+    const id = routeState.nextId("st");
+    routeState.mutate((x) =>
+      x.steps.splice(at, 0, { id, kind: "chapter", at: routeState.elapsed(), page: { url: location.href, title: document.title }, title: title.trim(), caption: title.trim(), frames: {} }),
+    );
+    return { stepId: id };
+  },
+
+  async clear_route() {
+    const n = routeState.route()?.steps.length ?? 0;
+    await routeState.clearRoute();
+    return { cleared: n };
+  },
+
+  async export_route() {
+    try {
+      return await exportRoute();
+    } catch (err) {
+      throw new CommandError(err instanceof Error ? err.message : String(err));
+    }
+  },
+
+  async get_route_prompt() {
+    const r = await buildRoute(false);
+    if (!r) throw new CommandError("No route recorded on this site");
+    return { prompt: routePrompt(r), steps: r.steps.length };
   },
 
   set_enabled({ enabled }: { enabled: boolean }) {

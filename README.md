@@ -73,6 +73,53 @@ Tip: search the codebase for the old text or the class names above to locate eac
 - When changes span several pages, the prompt starts with `I reviewed N pages of the live site…` and puts each page's changes under its own `## Page: <URL>  |  Title: <title>` heading. Numbering continues across pages.
 - Several edits to the same element become one entry (original → latest). Editing text back to its original removes the entry.
 
+## Route mode: record a walkthrough for HyperFrames
+
+Switch the panel from **Markup** to **Route**. In Route mode the page works normally (nothing is intercepted), and while you're recording, every interaction becomes a step:
+
+| You do | Recorded as |
+| --- | --- |
+| Click a button, link, tab, menu item, row… | `click` with the control's role, accessible name, test id, selector and its rect **measured before the click**, plus where inside it you clicked |
+| Click into a field and type | `fill` with the final value, the field's label, and typing stops measured in the field's own font (one width per character) |
+| Pick from a native `<select>` | `select` with the option label |
+| Tick a checkbox, radio or switch | `check` with the state afterwards |
+| Enter, Escape, ⌘/Ctrl+key | `press` |
+| Scroll the page or a panel (80px+) | `scroll` with from/to positions |
+| Land on another URL | the click that caused it gets `navigatesTo`; otherwise a `navigate` step |
+
+Each settled state is screenshotted (the Agent Markup UI is hidden for the shot), so a step has a **before** frame, an **after** frame, and for fills a **focused** frame (field focused, still empty). One step's after-frame is the next step's before-frame. The status dot pulses while a frame is saving; **pause a beat between actions** — a step that starts while the previous one is still settling gets no before-frame and a warning. Password-like fields are never recorded (the value becomes bullets).
+
+The route is saved per site and survives full page loads, so you can click through a multi-page flow. In the panel:
+
+- Name the route, **Record / Pause / Resume**, and **+ Chapter** to add a section card.
+- Each step shows a thumbnail and an auto-written caption (*Click “New order”*, *Type “Nike Dunk Low” in “Customer”*). Click the caption to rewrite it; ★ emphasizes a step (longer hold, closer zoom); × deletes it.
+- **Export route** saves `~/.agent-markup/routes/<title>-<time>/route.json` + `frames/*.jpg` through the local receiver (`node scripts/receiver.mjs`), or one self-contained JSON in Downloads when the receiver isn't running.
+- **Copy prompt** copies a step-by-step description of the route with the commands below.
+
+### Turn a route into a video
+
+```sh
+node scripts/route-to-hyperframes.mjs ~/.agent-markup/routes/<route>/ --out ~/videos/create-order
+cd ~/videos/create-order && npx hyperframes check && npx hyperframes preview
+```
+
+The composer writes a HyperFrames project: the real screenshots in a browser window with the page's URL, a camera that pushes in on each control (capped by the screenshots' pixel budget, so it never upscales), one cursor that travels to exactly where you clicked (per-axis easing, small overshoot), click ripples, typing revealed glyph by glyph from the real after-frame at the measured widths (the placeholder disappears on the first keystroke), key and choice badges, scroll pans, captions that move to the top when the subject is low, chapter cards, a title card and a recap. It also writes:
+
+- `STORYBOARD.md`: one frame per step (caption, voiceover guide, action, value, frames, timing) for review.
+- `REVIEW.md`: everything that needs a decision: steps without frames, screen changes with no cause (usually a deleted step), off-screen targets, hidden values, 1× captures with no zoom headroom.
+- `timeline.json`: each beat's start and end, for lining up narration.
+
+Nothing the route didn't capture is painted in; it's reported in `REVIEW.md` instead.
+
+### Re-film a route
+
+```sh
+node scripts/replay-route.mjs <route.json | dir> --base-url http://localhost:5173 --dpr 2 \
+  --set st_4="Air Max 1" --storage-state auth.json --out <dir>
+```
+
+Replays every step with Playwright against another environment (a seeded demo instead of your live data), at the viewport and scale you choose, with new values: `--set` takes a step id or a variable name you gave a step (`update_step { variable }`). It finds each target by selector, then role + name, label or text; scrolls it into view as an explicit scroll step before shooting it (a frame must show what the cursor points at); and stops with `REPLAY.md` if a target is missing. The output is a route in the same format, so it goes straight into the composer.
+
 ## Architecture (built so an AI can drive it)
 
 ```
@@ -111,6 +158,12 @@ Everything goes through `executeCommand`: the UI, keyboard shortcuts and outside
 | `find_elements` | `{ query?, text?, selector?, limit? }` | `[{ elementId, tag, role, text, selector, section }]` |
 | `get_page_outline` | `{ limit?, includeSelectors? }` | headings, buttons, links, paragraphs, images with alt, fields |
 | `set_enabled` | `{ enabled }` | `{ enabled }` |
+| `set_mode` | `{ mode: "markup" \| "route" }` | `{ mode }` |
+| `start_recording` / `stop_recording` | `{ title? }` / `{}` | route id, step count |
+| `get_route` | `{ includeFrames? }` | the `agent-markup/route-v1` route |
+| `update_step` | `{ stepId, caption?, note?, emphasis?, variable?, title? }` | `{ stepId }` |
+| `delete_step` / `add_chapter` | `{ stepId }` / `{ title, afterStepId? }` | |
+| `rename_route` / `clear_route` / `export_route` / `get_route_prompt` | | |
 
 - `executeCommand(name, params)` checks `params` against the command's JSON Schema. It always returns `{ ok, data?, error? }` and never throws.
 - Element IDs such as `el_12` are assigned the first time an element is referenced, so a person and an AI name elements the same way. Use `find_elements({ query: "the Book a demo button" })` or `get_page_outline()` to get IDs. No screenshots needed.
@@ -156,6 +209,7 @@ The background worker injects the content script if it isn't already there and f
 
 ```sh
 bun run test:e2e     # hostile local fixture page: UI isolation, edits, remove, notes, drag, undo/redo, Alt-browse, prompt, reload
+bun run test:route   # Route mode: record a flow on a fixture app, compose it, replay it
 bun run test:sites   # smoke test on real sites (Mailchimp, Python docs, Tailwind, MDN) through the command layer
 ```
 

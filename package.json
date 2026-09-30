@@ -11,7 +11,8 @@
     "watch": "bun build.mjs --watch",
     "typecheck": "tsc --noEmit",
     "test:e2e": "bun build.mjs --test && bun tests/e2e.mjs",
-    "test:sites": "bun build.mjs --test && bun tests/real-sites.mjs"
+    "test:sites": "bun build.mjs --test && bun tests/real-sites.mjs",
+    "test:route": "bun build.mjs --test && bun tests/route.mjs"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.0",

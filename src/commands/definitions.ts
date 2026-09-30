@@ -141,6 +141,106 @@ export const COMMAND_DEFINITIONS = [
       additionalProperties: false,
     },
   },
+  {
+    name: "set_mode",
+    description:
+      'Switch between "markup" (clicks select elements to edit, remove, note or move) and "route" (the page works normally and, while recording, every click, typed value, choice, key press, scroll and navigation is recorded with screenshots for a walkthrough video).',
+    parameters: {
+      type: "object",
+      properties: { mode: { type: "string", enum: ["markup", "route"] } },
+      required: ["mode"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "start_recording",
+    description:
+      "Start (or resume) recording a route on this site. Switches to route mode. Starting a new route takes a screenshot of the current state first. Interactions must be real (trusted) input: a person, or an agent driving the browser through CDP.",
+    parameters: {
+      type: "object",
+      properties: { title: { type: "string", description: "Route title, e.g. \"Receive a purchase order\". Only used when a new route starts." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "rename_route",
+    description: "Set the route's title (used on the title card and in file names).",
+    parameters: {
+      type: "object",
+      properties: { title: { type: "string" } },
+      required: ["title"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "stop_recording",
+    description: "Pause recording. The route is kept; start_recording resumes it.",
+    parameters: noParams,
+  },
+  {
+    name: "get_route",
+    description:
+      "Return the recorded route (agent-markup/route-v1): steps with kind, target (role, accessible name, label, selector, rect measured before the action), value, caption and frame ids. includeFrames inlines each screenshot as a data: URL (large).",
+    parameters: {
+      type: "object",
+      properties: { includeFrames: { type: "boolean", description: "Inline screenshots. Default false." } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_step",
+    description:
+      "Edit a recorded step: its on-screen caption, voiceover note, emphasis (hold longer, zoom closer), a variable name for replay substitution, or a chapter title.",
+    parameters: {
+      type: "object",
+      properties: {
+        stepId: { type: "string", minLength: 1 },
+        caption: { type: "string" },
+        note: { type: "string" },
+        emphasis: { type: "boolean" },
+        variable: { type: "string", description: 'Name the value (e.g. "sku") so a replay can substitute another.' },
+        title: { type: "string", description: "Chapter title (chapter steps only)." },
+      },
+      required: ["stepId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "delete_step",
+    description: "Delete a recorded step (e.g. a mis-click). The frames on either side then meet with a cut, which the composer flags for review.",
+    parameters: {
+      type: "object",
+      properties: { stepId: { type: "string", minLength: 1 } },
+      required: ["stepId"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "add_chapter",
+    description: "Insert a chapter marker (a titled section card in the video) at the end of the route, or after a given step.",
+    parameters: {
+      type: "object",
+      properties: { title: { type: "string", minLength: 1 }, afterStepId: { type: "string" } },
+      required: ["title"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "clear_route",
+    description: "Delete the recorded route and its screenshots.",
+    parameters: noParams,
+  },
+  {
+    name: "export_route",
+    description:
+      "Save the route for the HyperFrames composer: to the local receiver as <dir>/route.json + frames/*.jpg, or, if the receiver is not running, as one JSON file with inlined frames in Downloads.",
+    parameters: noParams,
+  },
+  {
+    name: "get_route_prompt",
+    description: "A prompt describing the route step by step, with the commands that turn it into a HyperFrames walkthrough.",
+    parameters: noParams,
+  },
 ] as const satisfies readonly { name: string; description: string; parameters: JSONSchema }[];
 
 export type CommandName = (typeof COMMAND_DEFINITIONS)[number]["name"];

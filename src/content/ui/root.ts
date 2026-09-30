@@ -37,6 +37,11 @@ export function unmountHost() {
 
 export const shadow = () => root;
 
+/** Hides the whole UI without unmounting it (route screenshots must not show it). */
+export function setHostHidden(hidden: boolean) {
+  host?.style.setProperty("visibility", hidden ? "hidden" : "visible", "important");
+}
+
 /** True if the event originated inside Agent Markup's UI. */
 export function isOurEvent(e: Event): boolean {
   return !!host && e.composedPath().includes(host);
@@ -77,5 +82,12 @@ export const ICONS = {
   redo: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10.5 3l3 3-3 3"/><path d="M13.5 6H6a3.5 3.5 0 0 0 0 7h3"/></svg>',
   chevron: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 6 4 4 4-4"/></svg>',
   close: '<svg viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="m4 4 8 8M12 4l-8 8"/></svg>',
+  pointer: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><path d="M4 2.5v10l2.6-2.4 1.8 3.9 1.7-.8-1.8-3.8H12z"/></svg>',
+  key: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="1.5" y="4" width="13" height="8.5" rx="2"/><path d="M4.5 9.5h7M4.5 6.8h.01M7 6.8h.01M9.5 6.8h.01M12 6.8h.01"/></svg>',
+  arrow: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 8h11M9.5 4l4 4-4 4"/></svg>',
+  star: '<svg viewBox="0 0 16 16" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="m8 2 1.8 3.8 4.1.5-3 2.9.8 4.1L8 11.3l-3.7 2 .8-4.1-3-2.9 4.1-.5z"/></svg>',
+  record: '<svg viewBox="0 0 16 16" width="12" height="12"><circle cx="8" cy="8" r="5" fill="var(--color-danger)"/></svg>',
+  pause: '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><rect x="3.5" y="3" width="3" height="10" rx="1"/><rect x="9.5" y="3" width="3" height="10" rx="1"/></svg>',
+  film: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="m6.5 6 3.5 2-3.5 2z" fill="currentColor"/></svg>',
   copy: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>',
 };

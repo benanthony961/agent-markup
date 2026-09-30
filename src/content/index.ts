@@ -3,6 +3,7 @@ import { getToolDefinitions } from "../commands/definitions";
 import { isCommandMessage, PING_MESSAGE, STATE_MESSAGE, TOGGLE_MESSAGE } from "../shared/messages";
 import { executeCommand, onCommand } from "./commands";
 import { initAutoSend, installBridge } from "./export";
+import { restoreRoute } from "./route/state";
 import { restore } from "./session";
 import { store } from "./store";
 import { createUI } from "./ui";
@@ -17,6 +18,7 @@ if (!window.__agentMarkup) {
   window.__agentMarkup = { executeCommand, getToolDefinitions, onCommand };
   createUI();
   void restore();
+  void restoreRoute();
   installBridge(() => store.get().enabled);
   void initAutoSend();
 

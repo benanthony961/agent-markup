@@ -1,5 +1,6 @@
 // One small store for changes, history state and UI state. The UI subscribes
 // and re-renders; only the command layer writes `changes`/history fields.
+import type { Route } from "../shared/route";
 import type { Change } from "./changes";
 
 export interface State {
@@ -23,6 +24,13 @@ export interface State {
   sync: Record<string, { state: "sent" | "needs-call"; note?: string }>;
   /** Send automatically after a pause in editing. */
   autoSend: boolean;
+  /** "markup" edits the page; "route" records a click-through for a walkthrough video. */
+  mode: "markup" | "route";
+  /** The route being recorded on this site, if any. */
+  route: Route | null;
+  recording: boolean;
+  /** Screenshots in flight, and the last capture problem (shown in the panel). */
+  capture: { pending: number; error: string | null };
 }
 
 type Listener = (state: State, prev: State) => void;
@@ -42,6 +50,10 @@ class Store {
     toast: null,
     sync: {},
     autoSend: false,
+    mode: "markup",
+    route: null,
+    recording: false,
+    capture: { pending: 0, error: null },
   };
   private listeners = new Set<Listener>();
   private scheduled = false;

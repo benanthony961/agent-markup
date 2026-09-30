@@ -6,6 +6,7 @@ import { sendAndTrack, setAutoSend } from "../export";
 import { elementOf } from "../registry";
 import { store, type State } from "../store";
 import { h, ICONS } from "./root";
+import { createRouteBody } from "./routePanel";
 
 const PANEL_KEY = "ui:panel";
 
@@ -43,11 +44,15 @@ export function createPanel() {
   const count = h("span", { class: "count" }, "0");
   const collapseBtn = h("button", { class: "icon-btn collapse", title: "Collapse", "aria-label": "Collapse panel", html: ICONS.chevron });
   const closeBtn = h("button", { class: "icon-btn", title: "Turn off Agent Markup (Alt+Shift+R)", "aria-label": "Turn off", html: ICONS.close });
+  const markupTab = h("button", { class: "mode-tab", role: "tab", title: "Edit the page and send changes to your agent" }, "Markup");
+  const routeTab = h("button", { class: "mode-tab", role: "tab", title: "Record a click-through for a walkthrough video" }, "Route");
+  markupTab.addEventListener("click", () => void executeCommand("set_mode", { mode: "markup" }));
+  routeTab.addEventListener("click", () => void executeCommand("set_mode", { mode: "route" }));
   const head = h(
     "div",
     { class: "head" },
     h("span", { class: "logo", html: ICONS.mark }),
-    h("span", { class: "name" }, "Agent Markup"),
+    h("div", { class: "modes", role: "tablist", "aria-label": "Mode" }, markupTab, routeTab),
     count,
     h("span", { class: "browse" }, "Browsing"),
     h("span", { class: "grow" }),
@@ -75,7 +80,8 @@ export function createPanel() {
     autoRow,
     h("div", { class: "foot", html: "Hold <kbd>Alt</kbd> to use the page normally" }),
   );
-  const panel = h("div", { class: "panel", role: "region", "aria-label": "Agent Markup changes" }, head, body);
+  const routeBody = createRouteBody();
+  const panel = h("div", { class: "panel", role: "region", "aria-label": "Agent Markup" }, head, body, routeBody.el);
 
   undoBtn.addEventListener("click", () => void executeCommand("undo"));
   redoBtn.addEventListener("click", () => void executeCommand("redo"));
@@ -188,7 +194,27 @@ export function createPanel() {
     });
     return h("li", { class: "undo-strip", role: "status" }, h("span", {}, `Cleared ${count} ${count === 1 ? "change" : "changes"}`), undo);
   };
+  let routeToastTimer = 0;
   function render(s: State) {
+    const route = s.mode === "route";
+    panel.classList.toggle("route-mode", route);
+    markupTab.setAttribute("aria-selected", String(!route));
+    routeTab.setAttribute("aria-selected", String(route));
+    if (route) {
+      count.textContent = String(s.route?.steps.filter((x) => x.kind !== "chapter").length ?? 0);
+      panel.classList.toggle("collapsed", s.panel.collapsed);
+      collapseBtn.title = s.panel.collapsed ? "Expand" : "Collapse";
+      applyPos(s.panel.x, s.panel.y, s.panel.anchor);
+      routeBody.render(s);
+      if (s.toast && s.toast.at !== lastToast) {
+        lastToast = s.toast.at;
+        panel.dataset.toast = s.toast.text;
+        clearTimeout(routeToastTimer);
+        routeToastTimer = window.setTimeout(() => delete panel.dataset.toast, 2600);
+      }
+      lastChanges = null;
+      return;
+    }
     if (s.toast && s.toast.at !== lastToast) {
       lastToast = s.toast.at;
       flashCopy({ label: s.toast.text, kind: "done" });
