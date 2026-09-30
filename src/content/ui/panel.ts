@@ -2,6 +2,7 @@
 import type { Change } from "../changes";
 import { executeCommand } from "../commands";
 import { truncate } from "../describe";
+import { sendAndTrack, setAutoSend } from "../export";
 import { elementOf } from "../registry";
 import { store, type State } from "../store";
 import { h, ICONS } from "./root";
@@ -58,6 +59,10 @@ export function createPanel() {
   const redoBtn = h("button", { class: "btn quiet", title: "Redo (⌘/Ctrl+Shift+Z)", html: ICONS.redo + "<span>Redo</span>" });
   const clearBtn = h("button", { class: "btn danger" }, "Clear all");
   const copyBtn = h("button", { class: "btn primary copy" });
+  const sendBtn = h("button", { class: "btn send", title: "Send new changes to the agent (⌘⇧Enter). Saves a JSON file to Downloads if the receiver is off." }, "Send to agent");
+  const autoBox = h("input", { type: "checkbox", id: "am-auto" }) as HTMLInputElement;
+  const autoRow = h("label", { class: "auto", for: "am-auto" }, autoBox, h("span", {}, "Auto-send after a 5s pause"));
+  autoBox.addEventListener("change", () => setAutoSend(autoBox.checked));
   const copyHelp = h("div", { class: "copy-help", role: "status" });
   const body = h(
     "div",
@@ -65,7 +70,9 @@ export function createPanel() {
     list,
     h("div", { class: "tools" }, undoBtn, redoBtn, h("span", { class: "grow" }), clearBtn),
     copyBtn,
+    sendBtn,
     copyHelp,
+    autoRow,
     h("div", { class: "foot", html: "Hold <kbd>Alt</kbd> to use the page normally" }),
   );
   const panel = h("div", { class: "panel", role: "region", "aria-label": "Agent Markup changes" }, head, body);
@@ -89,6 +96,14 @@ export function createPanel() {
     dismissUndo();
     undoOffer = { count, after: store.get().changes, timer: window.setTimeout(() => (dismissUndo(), rerender()), 8000) };
     rerender();
+  });
+
+  sendBtn.addEventListener("click", async () => {
+    try {
+      await sendAndTrack();
+    } catch (err) {
+      flashCopy({ label: "Export failed", kind: "error", help: String((err as Error)?.message ?? err) });
+    }
   });
 
   let copyTimer = 0;
@@ -160,6 +175,7 @@ export function createPanel() {
   let lastChanges: Change[] | null = null;
   let lastPageKey = "";
   let lastOfferKey = 0;
+  let lastSync: State["sync"] | null = null;
   const rerender = () => {
     lastChanges = null;
     render(store.get());
@@ -186,6 +202,8 @@ export function createPanel() {
     setDisabled(undoBtn, !s.canUndo);
     setDisabled(redoBtn, !s.canRedo);
     setDisabled(clearBtn, n === 0);
+    setDisabled(sendBtn, n === 0);
+    autoBox.checked = s.autoSend;
     copyBtn.classList.toggle("done", copyState?.kind === "done");
     copyBtn.classList.toggle("error", copyState?.kind === "error");
     copyBtn.replaceChildren(
@@ -198,10 +216,11 @@ export function createPanel() {
     if (undoOffer && s.changes !== undoOffer.after) dismissUndo();
 
     const offerKey = undoOffer ? undoOffer.timer : 0;
-    if (s.changes === lastChanges && s.pageKey === lastPageKey && offerKey === lastOfferKey) return;
+    if (s.changes === lastChanges && s.pageKey === lastPageKey && offerKey === lastOfferKey && s.sync === lastSync) return;
     lastChanges = s.changes;
     lastPageKey = s.pageKey;
     lastOfferKey = offerKey;
+    lastSync = s.sync;
     const strip = undoOffer ? [undoStrip(undoOffer.count)] : [];
     if (!n) {
       list.replaceChildren(
@@ -210,8 +229,8 @@ export function createPanel() {
           "li",
           { class: "empty" },
           h("div", { class: "e-title" }, "No changes yet."),
-          h("div", {}, "Click an element on the page to edit its text, remove it, add a note or move it."),
-          h("div", { class: "e-hint", html: "Double-click to edit text right away." }),
+          h("div", {}, "Click text to edit it. Shift+click an element to remove it, add a note or move it."),
+          h("div", { class: "e-hint", html: "<kbd>⌘⇧Enter</kbd> sends your changes to the agent." }),
         ),
       );
       return;
@@ -253,8 +272,10 @@ export function createPanel() {
             KIND_LABEL[c.type],
             h("span", { class: "where" }, `<${c.tag}>`),
             here && !found ? h("span", { class: "flag" }, "Not on page") : "",
+            s.sync[c.id] ? h("span", { class: `flag sync-${s.sync[c.id].state}`, title: s.sync[c.id].note ?? "" }, s.sync[c.id].state === "sent" ? "Sent" : "Needs your call") : "",
           ),
           h("div", { class: "detail" }, ...detail(c)),
+          s.sync[c.id]?.note ? h("div", { class: "agent-note" }, s.sync[c.id].note!) : "",
         ),
         x,
       );

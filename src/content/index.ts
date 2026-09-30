@@ -2,6 +2,7 @@
 import { getToolDefinitions } from "../commands/definitions";
 import { isCommandMessage, PING_MESSAGE, STATE_MESSAGE, TOGGLE_MESSAGE } from "../shared/messages";
 import { executeCommand, onCommand } from "./commands";
+import { initAutoSend, installBridge } from "./export";
 import { restore } from "./session";
 import { store } from "./store";
 import { createUI } from "./ui";
@@ -16,6 +17,8 @@ if (!window.__agentMarkup) {
   window.__agentMarkup = { executeCommand, getToolDefinitions, onCommand };
   createUI();
   void restore();
+  installBridge(() => store.get().enabled);
+  void initAutoSend();
 
   store.subscribe((s, prev) => {
     if (s.enabled !== prev.enabled) chrome.runtime.sendMessage({ type: STATE_MESSAGE, enabled: s.enabled }).catch(() => {});

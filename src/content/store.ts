@@ -19,6 +19,10 @@ export interface State {
   /** x = left offset; y = distance from the `anchor` edge (the panel grows away from it). */
   panel: { collapsed: boolean; x: number | null; y: number | null; anchor: "top" | "bottom" };
   toast: { text: string; at: number } | null;
+  /** Delivery state of changes sent to the agent, by change id. Applied changes are dismissed, so they never appear here. */
+  sync: Record<string, { state: "sent" | "needs-call"; note?: string }>;
+  /** Send automatically after a pause in editing. */
+  autoSend: boolean;
 }
 
 type Listener = (state: State, prev: State) => void;
@@ -36,6 +40,8 @@ class Store {
     flash: null,
     panel: { collapsed: false, x: null, y: null, anchor: "bottom" },
     toast: null,
+    sync: {},
+    autoSend: false,
   };
   private listeners = new Set<Listener>();
   private scheduled = false;

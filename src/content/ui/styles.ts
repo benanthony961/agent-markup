@@ -213,7 +213,7 @@ kbd {
 
 .panel .list { list-style: none; margin: 0; padding: 6px; overflow-y: auto; flex: 1 1 auto; min-height: 0; overscroll-behavior: contain; }
 /* Only the list gives up height when the panel is capped; the chrome around it never shrinks. */
-.panel .head, .panel .tools, .panel .copy, .panel .copy-help, .panel .foot { flex: none; }
+.panel .head, .panel .tools, .panel .copy, .panel .send, .panel .auto, .panel .copy-help, .panel .foot { flex: none; }
 .panel .list::-webkit-scrollbar { width: 10px; }
 .panel .list::-webkit-scrollbar-thumb { background: var(--color-line-strong); border-radius: 5px; border: 3px solid var(--color-bg); }
 .panel .empty { padding: 12px 10px; color: var(--color-ink-2); line-height: 1.55; text-wrap: pretty; }
@@ -275,6 +275,11 @@ kbd {
   font-size: 11px; font-weight: 600; background: var(--color-count-bg); color: var(--color-count-ink);
 }
 .panel .copy-icon { display: flex; }
+.panel .auto { display: flex; align-items: center; gap: 6px; margin: 8px 12px 0; font-size: 12px; color: var(--color-ink-2); cursor: pointer; }
+.item .flag.sync-sent { color: var(--color-ink-3); }
+.item .flag.sync-needs-call { color: var(--color-danger); }
+.item .agent-note { margin-top: 4px; font-size: 12px; line-height: 1.4; color: var(--color-danger); }
+.panel .send { margin: 6px 8px 0; height: 32px; font-size: 12px; font-weight: 600; }
 .panel .copy.error, .panel .copy.error svg { color: var(--color-danger-ink); }
 .panel .copy.error { background: var(--color-danger); }
 .panel .copy-help { display: none; padding: 6px 12px 0; color: var(--color-danger); font-size: 12px; line-height: 1.4; }

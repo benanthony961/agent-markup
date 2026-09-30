@@ -11,6 +11,10 @@ export const TOGGLE_MESSAGE = "agent-markup:toggle";
 export const PING_MESSAGE = "agent-markup:ping";
 /** Content -> background: enabled state changed (for the badge). */
 export const STATE_MESSAGE = "agent-markup:state";
+/** Content -> background: deliver an export to the local receiver (the page itself can't reach it). */
+export const SEND_MESSAGE = "agent-markup:send";
+/** Content -> background: fetch the agent's result for a sent review from the receiver. */
+export const RESULT_MESSAGE = "agent-markup:result";
 /** Any client -> background: get tool definitions. */
 export const TOOLS_MESSAGE = "agent-markup:get-tool-definitions";
 
