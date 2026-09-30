@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent Markup settings</title>
+  <style>
+    :root { color-scheme: light dark; font: 14px/1.5 system-ui, sans-serif; }
+    body { max-width: 640px; margin: 32px auto; padding: 0 16px; }
+    h1 { font-size: 20px; margin: 0 0 4px; }
+    h2 { font-size: 15px; margin: 28px 0 4px; }
+    p { margin: 0 0 8px; color: GrayText; }
+    textarea { width: 100%; min-height: 120px; font: 13px/1.5 ui-monospace, monospace; padding: 8px; box-sizing: border-box; }
+    .row { display: flex; gap: 12px; align-items: center; margin-top: 20px; }
+    button { font: inherit; padding: 6px 14px; }
+    #status { color: GrayText; }
+    code { font-size: 12.5px; }
+  </style>
+</head>
+<body>
+  <h1>Agent Markup settings</h1>
+  <p>Saved in this browser only.</p>
+
+  <h2>Categories</h2>
+  <p>One per line, as <code>id: Label</code>. The first is the default for new notes and highlights. The id is what agents see in exports.</p>
+  <textarea id="categories" spellcheck="false"></textarea>
+
+  <h2>Sites your agent can read from</h2>
+  <p>One origin per line. On these sites, a script on the page can read (never change) your markup, which lets an agent that drives the browser collect it without copy and paste. <code>*</code> matches any port or subdomain, e.g. <code>http://localhost:*</code>. Only add sites you control.</p>
+  <textarea id="origins" spellcheck="false"></textarea>
+
+  <div class="row">
+    <button id="save">Save</button>
+    <button id="reset">Restore defaults</button>
+    <span id="status" role="status"></span>
+  </div>
+  <script src="options.js"></script>
+</body>
+</html>

@@ -18,9 +18,10 @@ import {
   type CommandResult,
 } from "./shared/messages";
 
-const RECEIVER_URL = "http://127.0.0.1:47800/markup";
-const RESULT_URL = "http://127.0.0.1:47800/result/";
-const ROUTE_URL = "http://127.0.0.1:47800/route";
+declare const __RECEIVER__: string;
+const RECEIVER_URL = `${__RECEIVER__}/markup`;
+const RESULT_URL = `${__RECEIVER__}/result/`;
+const ROUTE_URL = `${__RECEIVER__}/route`;
 const ENABLED_KEY = "enabledTabs";
 const OPTED_OUT_KEY = "optedOutTabs";
 // Dev servers where Agent Markup turns itself on when the page loads. Deliberately

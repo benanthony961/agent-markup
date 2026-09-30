@@ -2,6 +2,13 @@
 // and re-renders; only the command layer writes `changes`/history fields.
 import type { Route } from "../shared/route";
 import type { Change } from "./changes";
+import { DEFAULT_SETTINGS, type Settings } from "../shared/settings";
+import type { TextQuote } from "./textAnchor";
+
+/** A highlight the user is about to create: the phrase and the element it sits in. */
+export interface HighlightDraft extends TextQuote {
+  elementId: string;
+}
 
 export interface State {
   enabled: boolean;
@@ -31,6 +38,12 @@ export interface State {
   recording: boolean;
   /** Screenshots in flight, and the last capture problem (shown in the panel). */
   capture: { pending: number; error: string | null };
+  /** Settings from the options page (categories, bridge origins). */
+  settings: Settings;
+  /** The page text currently selected, offered as a highlight. */
+  selectionDraft: HighlightDraft | null;
+  /** The highlight editor: a new draft, or an existing highlight by change id. */
+  highlightEdit: { draft: HighlightDraft } | { changeId: string } | null;
 }
 
 type Listener = (state: State, prev: State) => void;
@@ -54,6 +67,9 @@ class Store {
     route: null,
     recording: false,
     capture: { pending: 0, error: null },
+    settings: DEFAULT_SETTINGS,
+    selectionDraft: null,
+    highlightEdit: null,
   };
   private listeners = new Set<Listener>();
   private scheduled = false;

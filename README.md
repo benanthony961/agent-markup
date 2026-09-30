@@ -33,6 +33,28 @@ While it's on:
 - All other clicks on the page are intercepted, so selecting an element never follows a link or submits a form.
 - **Esc** clears the selection.
 
+### Highlights and categories
+
+- **Highlight a phrase**: hold **Shift** and drag across text (or hold **Alt** and select it normally). A **Highlight** button appears next to the selection. Pick a category, add an optional note, and save. The phrase stays highlighted and gets a numbered pin; click the pin to edit or remove it. Highlights are drawn with the CSS Custom Highlight API, so the page's own DOM is not modified.
+- **Categories** label notes and highlights (for example *Wording*, *Unclear*, *Wrong or unverified*, *Cut*, *Move elsewhere*, *Product bug*) so an agent can treat each kind differently. Edit the list on the extension's options page.
+- A highlight is stored as the quoted text plus a little of the text on either side, so it finds the same phrase again after a reload.
+
+### Sending the markup to an agent
+
+- **Send to agent** (or **⌘⇧Enter**) sends the changes the agent hasn't seen yet in the `agent-markup/v1` format: one entry per change with its page, section, selector, category, old and new text, note, or highlighted quote and context, plus the prose prompt.
+  - With the local receiver running (`node scripts/receiver.mjs`, loopback only), it lands in `~/.agent-markup/inbox/agent-markup-<host>-<time>.json`. An agent can long-poll `GET http://127.0.0.1:47800/wait` for the next review, and answers by writing `<same name>.applied.json` next to it: `{"results":[{"number":1,"status":"applied"},{"number":2,"status":"needs-call","note":"…"}]}`. The panel then drops applied changes and flags the rest **Needs your call** with the agent's note.
+  - Without the receiver, the same JSON is saved to Downloads. Point your agent at the newest file.
+  - **Auto-send after a 5s pause** sends new changes on its own. Each change is marked **Sent** until the agent answers.
+  - The `export_markup` command sends every change the same way; `get_markup` returns the JSON.
+- **Read-only bridge**: on sites listed on the options page (by default `http://localhost:*` and `http://127.0.0.1:*`), a script running in the page can read the markup, which lets an agent that drives the browser collect it directly:
+
+  ```js
+  window.postMessage({ type: "agent-markup:request", id: "1", name: "get_markup" }, location.origin);
+  // → a window message { type: "agent-markup:response", id: "1", result: { ok, data } }
+  ```
+
+  Only `get_markup`, `list_changes` and `get_prompt` are answered; nothing sent this way can change the page, the session or the settings. Any script on an allowed site can read the markup, so list only sites you control. Agent Markup has to have been turned on in that tab.
+
 ### Changes panel
 
 The panel sits at the bottom right. You can drag it by its header and collapse it.
@@ -149,12 +171,16 @@ Everything goes through `executeCommand`: the UI, keyboard shortcuts and outside
 | `select_element` | `{ elementId \| null, scrollIntoView?, flash? }` | selected element info |
 | `edit_text` | `{ elementId, newText }` | `{ changed, changeId, oldText, newText }` |
 | `remove_element` | `{ elementId }` | `{ changeId }` |
-| `add_note` | `{ elementId, note }` (empty note deletes it) | `{ changed, changeId }` |
+| `add_note` | `{ elementId, note, category? }` (empty note deletes it) | `{ changed, changeId }` |
 | `move_element` | `{ elementId, targetId, position: "before" \| "after" }` (any target outside the element itself) | `{ changed, changeId }` |
 | `revert_change` | `{ changeId }` | `{ reverted }` |
 | `undo` / `redo` / `clear_all` | `{}` | status |
 | `list_changes` | `{}` | changes in prompt order, each with its `page` and `onThisPage` |
 | `get_prompt` / `copy_prompt` | `{}` | `{ prompt, count }` |
+| `add_highlight` | `{ elementId, quote, prefix?, suffix?, note?, category? }` | `{ changeId }` |
+| `update_annotation` | `{ changeId, note?, category? }` (note or highlight) | `{ changed, changeId }` |
+| `get_markup` | `{}` | the structured `agent-markup/v1` export |
+| `export_markup` | `{}` | `{ filename, count }` (saves the JSON to Downloads) |
 | `find_elements` | `{ query?, text?, selector?, limit? }` | `[{ elementId, tag, role, text, selector, section }]` |
 | `get_page_outline` | `{ limit?, includeSelectors? }` | headings, buttons, links, paragraphs, images with alt, fields |
 | `set_enabled` | `{ enabled }` | `{ enabled }` |

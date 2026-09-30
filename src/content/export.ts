@@ -1,45 +1,21 @@
-// The agent-markup/v1 export and everything around handing a review to an agent:
-// "Send to agent" (local receiver, Downloads fallback), tracking what has been
-// sent, reading the agent's answer back, and the page bridge.
+// Handing a review to an agent: "Send to agent" delivers the agent-markup/v1
+// export (markup.ts) to the local receiver, falling back to a file in
+// Downloads; tracks what has been sent; and reads the agent's answer back.
+// The read-only page bridge lives in bridge.ts.
 import { RESULT_MESSAGE, SEND_MESSAGE } from "../shared/messages";
 import { serialize, type Change } from "./changes";
-import { executeCommand } from "./commands";
+import { downloadText } from "./download";
+import { buildMarkup, markupFilename, type Markup } from "./markup";
 import * as session from "./session";
 import { store } from "./store";
 
-export const EXPORT_FORMAT = "agent-markup/v1";
-
-export interface MarkupExport {
-  format: typeof EXPORT_FORMAT;
-  site: string;
-  exportedAt: string;
-  changes: { id: string; number: number }[];
-}
-
-/** All changes, or only those whose ids are in `only`. `number` is the position in the full list. */
-export async function buildExport(only?: Set<string>): Promise<MarkupExport> {
-  const res = await executeCommand("list_changes");
-  const all = (res.data as MarkupExport["changes"] | undefined) ?? [];
-  return {
-    format: EXPORT_FORMAT,
-    site: location.origin,
-    exportedAt: new Date().toISOString(),
-    changes: only ? all.filter((c) => only.has(c.id)) : all,
-  };
-}
-
-/** Saves the export as ~/Downloads/agent-markup-<host>-<time>.json (the name agents look for). */
-async function download(data: MarkupExport) {
-  const stamp = data.exportedAt.replace(/[-:]/g, "").replace(/\.\d+Z$/, "").replace("T", "-");
-  const host = location.host.replace(/[^a-z0-9.-]/gi, "_");
-  const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: "application/json" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `agent-markup-${host}-${stamp}.json`;
-  document.documentElement.append(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 10_000);
+/** Receiver first; if it isn't running, a file in Downloads. */
+export async function deliver(payload: Markup): Promise<{ via: "receiver"; name: string } | { via: "download"; filename: string }> {
+  const res: { ok?: boolean; name?: string } | undefined = await chrome.runtime.sendMessage({ type: SEND_MESSAGE, payload }).catch(() => undefined);
+  if (res?.ok && res.name) return { via: "receiver", name: res.name };
+  const filename = markupFilename();
+  downloadText(filename, JSON.stringify(payload, null, 2));
+  return { via: "download", filename };
 }
 
 // ---- Sent-state tracking ---------------------------------------------------
@@ -60,22 +36,20 @@ interface AgentResult {
 export async function sendAndTrack(): Promise<void> {
   const pending = unsent();
   if (!pending.length) return toast("Nothing new to send");
-  const payload = await buildExport(new Set(pending.map((c) => c.id)));
-  const numberToId = new Map(payload.changes.map((c) => [c.number, c.id]));
-  const res: { ok?: boolean; name?: string } | undefined = await chrome.runtime.sendMessage({ type: SEND_MESSAGE, payload }).catch(() => undefined);
+  // Numbered 1..n within this send; the agent answers by number.
+  const payload = buildMarkup(pending);
+  const numberToId = new Map(pending.map((c, i) => [i + 1, c.id]));
+  const sent = await deliver(payload);
 
   for (const c of pending) sentSignature.set(c.id, signature(c));
   const sync = { ...store.get().sync };
   for (const c of pending) sync[c.id] = { state: "sent" };
   store.set({ sync });
 
-  if (res?.ok && res.name) {
+  if (sent.via === "receiver") {
     toast(`Sent ${plural(pending.length)} to agent`);
-    void awaitResult(res.name, numberToId);
-  } else {
-    await download(payload);
-    toast(`Saved ${plural(pending.length)} to Downloads`);
-  }
+    void awaitResult(sent.name, numberToId);
+  } else toast(`Saved ${plural(pending.length)} to Downloads`);
 }
 
 /** Polls the receiver for the agent's answer, then dismisses what it applied and flags what needs a decision. */
@@ -129,25 +103,5 @@ export async function initAutoSend() {
     clearTimeout(timer);
     if (!s.enabled || !s.autoSend || s.editingId || s.noteEditingId || !unsent().length) return;
     timer = window.setTimeout(() => void sendAndTrack(), AUTO_SEND_DELAY);
-  });
-}
-
-// ---- Page bridge -----------------------------------------------------------
-
-export const BRIDGE_REQUEST = "agent-markup:request";
-export const BRIDGE_RESPONSE = "agent-markup:response";
-
-/**
- * Lets an agent driving this tab read the markup in place (postMessage from the
- * page context, same origin only, read-only, and only while Agent Markup is on).
- */
-export function installBridge(isEnabled: () => boolean) {
-  addEventListener("message", async (e) => {
-    const m = e.data as { type?: string; id?: string; name?: string } | null;
-    if (e.source !== window || e.origin !== location.origin || m?.type !== BRIDGE_REQUEST || m.name !== "get_markup") return;
-    const result = isEnabled()
-      ? { ok: true, data: await buildExport() }
-      : { ok: false, error: "Agent Markup is off on this tab" };
-    postMessage({ type: BRIDGE_RESPONSE, id: m.id, result }, location.origin);
   });
 }

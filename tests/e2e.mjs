@@ -39,20 +39,20 @@ try {
   check("hover shows tag + selector", tagText.startsWith("h1") && root.locator(".tag.show") !== null, tagText);
 
   // Click interception
-  await page.click("#trial", { force: true });
+  await page.click("#trial", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(50);
   check("page click handlers blocked", (await page.evaluate(() => window.__clicked ?? 0)) === 0 && (await page.evaluate(() => window.__docClicks ?? 0)) === 0);
   check("click selects element and shows action bar", await root.locator(".bar.show").isVisible());
 
   // Edit text through the UI
-  await page.click("h1", { force: true });
+  await page.click("h1", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Edit text']").click();
   await page.keyboard.type("The email platform for fast-moving teams");
   await page.keyboard.press("Enter");
   await page.waitForTimeout(50);
   check("edit shows live", (await page.textContent("h1")) === "The email platform for fast-moving teams");
-  await page.click("h1", { force: true });
+  await page.click("h1", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Edit text']").click();
   await page.keyboard.type("Email for teams");
@@ -63,7 +63,7 @@ try {
   check("repeated edits collapse to one change", list.length === 1 && list[0].oldText === "Email marketing platform for startups" && list[0].newText === "Email for teams\nthat ship", JSON.stringify(list[0]?.newText));
 
   // Esc cancels
-  await page.click("h1", { force: true });
+  await page.click("h1", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Edit text']").click();
   await page.keyboard.type("nope");
@@ -97,13 +97,13 @@ try {
   check("editing doesn't navigate links", !page.url().includes("#demo"));
 
   // Remove
-  await page.click(".hero-subtitle", { force: true, position: { x: 5, y: 5 } });
+  await page.click(".hero-subtitle", { force: true, modifiers: ["Shift"], position: { x: 5, y: 5 } });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Remove']").click();
   check("remove hides live but keeps element in DOM", (await page.locator(".hero-subtitle").count()) === 1 && !(await page.locator(".hero-subtitle").isVisible()));
 
   // Note
-  await page.click("#trial", { force: true });
+  await page.click("#trial", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Note']").click();
   await page.keyboard.type("Use our brand color");
@@ -112,7 +112,7 @@ try {
   check("note shows a numbered pin", (await root.locator(".pin").count()) === 1, await root.locator(".pin").textContent());
 
   // Drag to reorder: Cheap before Fast (grid, horizontal)
-  await page.click(".feature-card:nth-child(3)", { force: true });
+  await page.click(".feature-card:nth-child(3)", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   const handle = root.locator(".bar .handle");
   const hb = await handle.boundingBox();
@@ -127,7 +127,7 @@ try {
   check("drag reorders among siblings", (await order()) === "Cheap,Fast,Reliable", await order());
 
   // Drag anywhere: a feature card dropped above the Pricing heading moves into #pricing
-  await page.click(".feature-card:nth-child(1)", { force: true });
+  await page.click(".feature-card:nth-child(1)", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   const hb2 = await root.locator(".bar .handle").boundingBox();
   const h2 = await page.locator("#pricing h2").boundingBox();
@@ -148,7 +148,7 @@ try {
   check("undo puts it back in its list", (await order()) === "Cheap,Fast,Reliable", await order());
 
   // Vertical move among plans
-  await page.click("#pricing .plan:nth-of-type(3)", { force: true });
+  await page.click("#pricing .plan:nth-of-type(3)", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   const hb3 = await root.locator(".bar .handle").boundingBox();
   const p1 = await page.locator("#pricing .plan").first().boundingBox();
@@ -183,7 +183,7 @@ try {
   await page.click("[data-testid=cta-demo]", { force: true, modifiers: ["Alt"] });
   check("Alt-click on a link navigates (no download)", page.url().endsWith("#demo"), page.url());
   await page.keyboard.up("Alt");
-  await page.click("#trial", { force: true });
+  await page.click("#trial", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   check("releasing Alt resumes editing", (await page.evaluate(() => window.__clicked)) === 1);
 
@@ -241,7 +241,7 @@ try {
   await cmd("undo");
   check("undo works for AI-triggered commands", (await plans()) === "Starter,Scale,Growth");
   const tools = await context.serviceWorkers()[0].evaluate(() => globalThis.agentMarkup.getToolDefinitions());
-  check("getToolDefinitions", tools.length === 15 && tools.every((t) => t.name && t.description && t.input_schema?.type === "object"), `${tools.length} tools`);
+  check("getToolDefinitions", tools.length === 30 && tools.every((t) => t.name && t.description && t.input_schema?.type === "object"), `${tools.length} tools`);
 
   // Dragging an only child moves its nearest ancestor with siblings (nav <a> inside <li>)
   const dragHandleTo = async (x, y) => {
@@ -257,7 +257,7 @@ try {
   const navOrder = () => page.$$eval(".nav-links li", (els) => els.map((e) => e.textContent.trim()).join(","));
   await cmd("select_element", { elementId: null }); // the action bar would sit over the nav otherwise
   await page.waitForTimeout(40);
-  await page.click(".nav-links a[href='/pricing']", { force: true });
+  await page.click(".nav-links a[href='/pricing']", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(60);
   const feat = await page.locator(".nav-links a[href='/features']").boundingBox();
   const navShown = await dragHandleTo(feat.x + 4, feat.y + feat.height / 2);
@@ -267,7 +267,7 @@ try {
   await cmd("undo");
 
   // A button in the hero can go above the headline (the bentonow.com case)
-  await page.click("#trial", { force: true });
+  await page.click("#trial", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(60);
   const h1b = await page.locator("h1").boundingBox();
   const aboveShown = await dragHandleTo(h1b.x + 40, h1b.y + 6);
@@ -277,7 +277,7 @@ try {
 
   // Dropping in the gap between grid items still finds the nearest sibling
   const cardsNow = await page.$$eval(".feature-card", (els) => els.map((e) => e.textContent).join(","));
-  await page.click(".feature-card:nth-child(3)", { force: true });
+  await page.click(".feature-card:nth-child(3)", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(60);
   const c1 = await page.locator(".feature-card:nth-child(1)").boundingBox();
   const c2 = await page.locator(".feature-card:nth-child(2)").boundingBox();
@@ -289,7 +289,7 @@ try {
   await cmd("undo");
 
   // Keyboard reorder from the drag handle
-  await page.click("#pricing .plan:nth-of-type(1)", { force: true });
+  await page.click("#pricing .plan:nth-of-type(1)", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(60);
   await ui().locator(".bar .handle").focus();
   await page.keyboard.press("ArrowDown");
@@ -303,7 +303,7 @@ try {
 
   // Clear all: one click, inline Undo
   const before = (await cmd("list_changes")).data.length;
-  await ui().locator(".panel .btn.danger").click();
+  await ui().locator(".panel .body:not(.r-body) .btn.danger").click();
   await page.waitForTimeout(60);
   check("clear all is one click", (await cmd("list_changes")).data.length === 0 && (await page.isVisible(".hero-subtitle")));
   check("inline undo strip shown", (await ui().locator(".undo-strip").textContent()).startsWith(`Cleared ${before} changes`));

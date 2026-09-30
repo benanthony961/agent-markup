@@ -67,8 +67,44 @@ export const COMMAND_DEFINITIONS = [
       'Attach a free-text instruction to an element, e.g. "make this bigger" or "use our brand color". One note per element; calling again replaces it. An empty note deletes it.',
     parameters: {
       type: "object",
-      properties: { elementId, note: { type: "string", description: "The instruction for the coding agent." } },
+      properties: {
+        elementId,
+        note: { type: "string", description: "The instruction for the coding agent." },
+        category: { type: "string", description: 'Optional category id from the settings, e.g. "wording" or "wrong".' },
+      },
       required: ["elementId", "note"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "add_highlight",
+    description:
+      "Highlight a phrase inside an element and optionally attach a note and category. The quote must appear in the element's text; prefix and suffix (a few characters of the surrounding text) pick the right occurrence when the phrase repeats.",
+    parameters: {
+      type: "object",
+      properties: {
+        elementId: { ...elementId, description: "The element containing the phrase, usually its paragraph or table cell." },
+        quote: { type: "string", minLength: 1, description: "The exact text to highlight." },
+        prefix: { type: "string", description: "Text just before the quote. Optional." },
+        suffix: { type: "string", description: "Text just after the quote. Optional." },
+        note: { type: "string", description: "Optional instruction for the coding agent." },
+        category: { type: "string", description: "Optional category id from the settings." },
+      },
+      required: ["elementId", "quote"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "update_annotation",
+    description: "Change the note or category of an existing note or highlight. An empty note deletes a note; a highlight keeps its highlight.",
+    parameters: {
+      type: "object",
+      properties: {
+        changeId: { type: "string", minLength: 1, description: 'Change ID such as "ch_3", from list_changes.' },
+        note: { type: "string" },
+        category: { type: "string", description: "Category id, or an empty string to clear it." },
+      },
+      required: ["changeId"],
       additionalProperties: false,
     },
   },
@@ -103,6 +139,18 @@ export const COMMAND_DEFINITIONS = [
   { name: "list_changes", description: "Return the current list of changes, in prompt order.", parameters: noParams },
   { name: "get_prompt", description: "Return the prompt text describing all changes, for a coding agent.", parameters: noParams },
   { name: "copy_prompt", description: "Copy the prompt text to the clipboard. Returns the copied text.", parameters: noParams },
+  {
+    name: "get_markup",
+    description:
+      'Return every change as structured data (format "agent-markup/v1"): page, section, selector, category, old/new text, notes and highlighted quotes, plus the prose prompt. Prefer this over get_prompt when a program reads the result.',
+    parameters: noParams,
+  },
+  {
+    name: "export_markup",
+    description:
+      "Send every change (the get_markup JSON) to the agent: to the local receiver's inbox (~/.agent-markup/inbox) when it is running, otherwise as a JSON file in Downloads. Returns where it went.",
+    parameters: noParams,
+  },
   {
     name: "find_elements",
     description:

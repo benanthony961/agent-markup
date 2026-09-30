@@ -61,7 +61,7 @@ export function createRouteBody() {
   const chapterBtn = h("button", { class: "btn quiet", title: "Add a chapter card after the last step" }, "+ Chapter");
   const clearBtn = h("button", { class: "btn danger" }, "Clear");
   const exportBtn = h("button", { class: "btn primary r-export", title: "Save route.json and frames for the HyperFrames composer" });
-  const promptBtn = h("button", { class: "btn send", title: "Copy a prompt describing the route and how to build the video" }, "Copy prompt");
+  const promptBtn = h("button", { class: "btn r-prompt", title: "Copy a prompt describing the route and how to build the video" }, "Copy prompt");
   const el = h(
     "div",
     { class: "body r-body" },

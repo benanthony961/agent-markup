@@ -37,6 +37,22 @@ export interface RemoveChange extends BaseChange {
 export interface NoteChange extends BaseChange {
   type: "note";
   note: string;
+  /** Category id from the settings, e.g. "wording". */
+  category?: string;
+}
+
+/**
+ * A highlighted phrase inside an element, with an optional note. The element
+ * (usually the paragraph or cell around the phrase) anchors the selector; the
+ * quote with its surrounding text finds the exact phrase again after a reload.
+ */
+export interface HighlightChange extends BaseChange {
+  type: "highlight";
+  quote: string;
+  prefix: string;
+  suffix: string;
+  note: string;
+  category?: string;
 }
 
 export interface MoveChange extends BaseChange {
@@ -51,7 +67,7 @@ export interface MoveChange extends BaseChange {
   fromParentSelector?: string;
 }
 
-export type Change = EditChange | RemoveChange | NoteChange | MoveChange;
+export type Change = EditChange | RemoveChange | NoteChange | MoveChange | HighlightChange;
 export type ChangeType = Change["type"];
 
 /** One reversible step: the change with this id goes from `before` to `after` (null = absent). */

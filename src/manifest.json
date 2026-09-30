@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Agent Markup",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Visually edit any live website, then copy one precise prompt for your coding agent.",
   "permissions": [
     "activeTab",
@@ -17,6 +17,10 @@
   ],
   "background": {
     "service_worker": "background.js"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
   },
   "action": {
     "default_title": "Toggle Agent Markup (Alt+Shift+R)",

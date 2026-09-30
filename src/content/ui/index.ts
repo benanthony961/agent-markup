@@ -4,6 +4,7 @@
 import { createRecorder } from "../route/recorder";
 import { store, type State } from "../store";
 import { cancel } from "./inlineEdit";
+import { createHighlights } from "./highlights";
 import { createInterceptor } from "./interceptor";
 import { createOverlay } from "./overlay";
 import { createPanel } from "./panel";
@@ -13,7 +14,8 @@ export function createUI() {
   const root = ensureRoot();
   const overlay = createOverlay();
   const panel = createPanel();
-  overlay.el.append(panel.el);
+  const highlights = createHighlights();
+  overlay.el.append(highlights.el, panel.el);
   root.append(overlay.el);
   const interceptor = createInterceptor(overlay);
   const recorder = createRecorder();
@@ -22,6 +24,7 @@ export function createUI() {
   let raf = 0;
   const loop = () => {
     overlay.frame();
+    highlights.frame();
     raf = requestAnimationFrame(loop);
   };
 
@@ -54,6 +57,7 @@ export function createUI() {
   }
 
   function unmount() {
+    store.set({ selectionDraft: null, highlightEdit: null });
     cancelAnimationFrame(raf);
     unmountHost();
   }

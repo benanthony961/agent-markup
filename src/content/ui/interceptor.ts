@@ -42,6 +42,8 @@ function pageTarget(e: Event): Element | null {
 export function createInterceptor(overlay: Overlay) {
   let browsing = false;
   let redispatching = false;
+  /** Where the last press happened, to tell a Shift+drag (highlight) from a Shift+click (select). */
+  let pressAt = { x: 0, y: 0 };
 
   const setBrowsing = (on: boolean) => {
     if (on === browsing) return;
@@ -73,6 +75,17 @@ export function createInterceptor(overlay: Overlay) {
           redispatching = false;
         }
       }
+      return;
+    }
+
+    // Shift+drag selects page text for a highlight: let the browser make the
+    // selection, but keep the page's own handlers (and navigation) out of it.
+    // A Shift+click that selected no text falls through and selects the element.
+    if (e.type === "pointerdown" || e.type === "mousedown") pressAt = { x: me.clientX, y: me.clientY };
+    const dragged = e.type === "click" && Math.hypot(me.clientX - pressAt.x, me.clientY - pressAt.y) > 4;
+    if (me.shiftKey && e.type !== "submit" && !editingElement() && (e.type !== "click" || dragged)) {
+      if (e.type === "click" || e.type === "dblclick" || e.type === "auxclick") e.preventDefault();
+      e.stopImmediatePropagation();
       return;
     }
 

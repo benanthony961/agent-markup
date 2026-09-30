@@ -89,5 +89,7 @@ export const ICONS = {
   record: '<svg viewBox="0 0 16 16" width="12" height="12"><circle cx="8" cy="8" r="5" fill="var(--color-danger)"/></svg>',
   pause: '<svg viewBox="0 0 16 16" width="12" height="12" fill="currentColor"><rect x="3.5" y="3" width="3" height="10" rx="1"/><rect x="9.5" y="3" width="3" height="10" rx="1"/></svg>',
   film: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="m6.5 6 3.5 2-3.5 2z" fill="currentColor"/></svg>',
+  highlight: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9.5 2.5 4 4-6 6H3.5v-4z"/><path d="M2.5 14h11"/></svg>',
+  send: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7"/><path d="M2.5 11.5v2h11v-2"/></svg>',
   copy: '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"/></svg>',
 };
