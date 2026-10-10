@@ -4,7 +4,7 @@ import { isCommandMessage, PING_MESSAGE, STATE_MESSAGE, TOGGLE_MESSAGE } from ".
 import { loadSettings, normalizeSettings, SETTINGS_KEY } from "../shared/settings";
 import { startBridge } from "./bridge";
 import { executeCommand, onCommand } from "./commands";
-import { initAutoSend } from "./export";
+import { initAutoSend, initDestination } from "./export";
 import { restoreRoute } from "./route/state";
 import { restore } from "./session";
 import { store } from "./store";
@@ -30,6 +30,7 @@ if (!window.__agentMarkup) {
   void restoreRoute();
   startBridge();
   void initAutoSend();
+  void initDestination();
 
   store.subscribe((s, prev) => {
     if (s.enabled !== prev.enabled) chrome.runtime.sendMessage({ type: STATE_MESSAGE, enabled: s.enabled }).catch(() => {});
