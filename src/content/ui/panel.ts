@@ -2,7 +2,7 @@
 import type { Change } from "../changes";
 import { executeCommand } from "../commands";
 import { truncate } from "../describe";
-import { sendAndTrack, setAutoSend } from "../export";
+import { effectiveDestination, sendAndTrack, setAutoSend, setDestination } from "../export";
 import { elementOf } from "../registry";
 import { store, type State } from "../store";
 import { h, ICONS } from "./root";
@@ -74,6 +74,16 @@ export function createPanel() {
   const autoBox = h("input", { type: "checkbox", id: "am-auto" }) as HTMLInputElement;
   const autoRow = h("label", { class: "auto", for: "am-auto" }, autoBox, h("span", {}, "Auto-send after a 5s pause"));
   autoBox.addEventListener("change", () => setAutoSend(autoBox.checked));
+  // Where Send goes. Auto: a waiting agent if there is one, otherwise a to-do in AIM Text Bridge.
+  const destSelect = h(
+    "select",
+    { id: "am-dest", title: "Agent: an agent waiting on the receiver applies it. To-do: AIM Text Bridge files it and starts an Orca agent on it." },
+    h("option", { value: "auto" }, "Auto"),
+    h("option", { value: "agent" }, "Agent"),
+    h("option", { value: "todo" }, "To-do"),
+  ) as HTMLSelectElement;
+  destSelect.addEventListener("change", () => setDestination(destSelect.value as "auto" | "agent" | "todo"));
+  const destRow = h("label", { class: "auto", for: "am-dest" }, h("span", {}, "Send to"), destSelect);
   const copyHelp = h("div", { class: "copy-help", role: "status" });
   const body = h(
     "div",
@@ -83,6 +93,7 @@ export function createPanel() {
     copyBtn,
     sendBtn,
     copyHelp,
+    destRow,
     autoRow,
     h("div", { class: "foot", html: "Hold <kbd>Alt</kbd> to use the page normally" }),
   );
@@ -235,6 +246,15 @@ export function createPanel() {
     setDisabled(redoBtn, !s.canRedo);
     setDisabled(clearBtn, n === 0);
     setDisabled(sendBtn, n === 0);
+    destSelect.value = s.destination;
+    const toTodo = effectiveDestination(s) === "todo";
+    sendBtn.replaceChildren(
+      h("span", { class: "send-icon", html: ICONS.send }),
+      h("span", {}, toTodo ? "Send as to-do" : "Send to agent"),
+    );
+    sendBtn.title = toTodo
+      ? "File these changes as a to-do in AIM Text Bridge, with a screenshot; an Orca agent starts on it (⌘⇧Enter)."
+      : "Send new changes to the waiting agent (⌘⇧Enter). Saves a JSON file to Downloads if the receiver is off.";
     autoBox.checked = s.autoSend;
     copyBtn.classList.toggle("done", copyState?.kind === "done");
     copyBtn.classList.toggle("error", copyState?.kind === "error");

@@ -2,12 +2,13 @@
 // export (markup.ts) to the local receiver, falling back to a file in
 // Downloads; tracks what has been sent; and reads the agent's answer back.
 // The read-only page bridge lives in bridge.ts.
-import { RESULT_MESSAGE, SEND_MESSAGE } from "../shared/messages";
+import { HEALTH_MESSAGE, RESULT_MESSAGE, SEND_MESSAGE, TODO_MESSAGE } from "../shared/messages";
 import { serialize, type Change } from "./changes";
 import { downloadText } from "./download";
 import { buildMarkup, markupFilename, type Markup } from "./markup";
 import * as session from "./session";
 import { store } from "./store";
+import { setHostHidden } from "./ui/root";
 
 /** Receiver first; if it isn't running, a file in Downloads. */
 export async function deliver(payload: Markup): Promise<{ via: "receiver"; name: string } | { via: "download"; filename: string }> {
@@ -32,10 +33,17 @@ interface AgentResult {
   results?: { number: number; status: "applied" | "needs-call"; note?: string }[];
 }
 
-/** Sends the changes the agent hasn't seen yet. Delivered: watch for its answer. Otherwise: save a file. */
+/** Where Send goes now: the chosen destination, or with "auto" an agent when one is waiting, else a to-do. */
+export function effectiveDestination(s = store.get()): "agent" | "todo" {
+  if (s.destination !== "auto") return s.destination;
+  return s.agentListening ? "agent" : "todo";
+}
+
+/** Sends the changes not sent yet, to a waiting agent or as a to-do. */
 export async function sendAndTrack(): Promise<void> {
   const pending = unsent();
   if (!pending.length) return toast("Nothing new to send");
+  if (effectiveDestination() === "todo") return sendAsTodo(pending);
   // Numbered 1..n within this send; the agent answers by number.
   const payload = buildMarkup(pending);
   const numberToId = new Map(pending.map((c, i) => [i + 1, c.id]));
@@ -50,6 +58,59 @@ export async function sendAndTrack(): Promise<void> {
     toast(`Sent ${plural(pending.length)} to agent`);
     void awaitResult(sent.name, numberToId);
   } else toast(`Saved ${plural(pending.length)} to Downloads`);
+}
+
+/**
+ * Files the changes as a to-do: the receiver keeps the review and a screenshot of the
+ * page, and AIM Text Bridge turns it into a to-do with an Orca agent working on it.
+ */
+async function sendAsTodo(pending: Change[]): Promise<void> {
+  const payload = buildMarkup(pending);
+  // Our own UI is hidden for the screenshot, as for route frames.
+  setHostHidden(true);
+  let res: { ok?: boolean; error?: string } | undefined;
+  try {
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+    res = await chrome.runtime.sendMessage({ type: TODO_MESSAGE, payload }).catch(() => undefined);
+  } finally {
+    setHostHidden(false);
+  }
+  if (!res?.ok) {
+    // No receiver: keep the review rather than lose it.
+    const filename = markupFilename();
+    downloadText(filename, JSON.stringify(payload, null, 2));
+    return toast("Receiver off: saved to Downloads");
+  }
+  for (const c of pending) sentSignature.set(c.id, signature(c));
+  const sync = { ...store.get().sync };
+  for (const c of pending) sync[c.id] = { state: "sent" };
+  store.set({ sync });
+  toast(`Filed ${plural(pending.length)} as a to-do`);
+}
+
+// ---- Destination -------------------------------------------------------------
+
+const DESTINATION_KEY = "destination";
+
+export function setDestination(destination: "auto" | "agent" | "todo") {
+  store.set({ destination });
+  void chrome.storage.local.set({ [DESTINATION_KEY]: destination }).catch(() => {});
+}
+
+/** Restores the chosen destination and keeps "is an agent waiting?" current while Agent Markup is on. */
+export async function initDestination() {
+  const saved = (await chrome.storage.local.get(DESTINATION_KEY).catch(() => ({} as Record<string, unknown>)))[DESTINATION_KEY];
+  if (saved === "agent" || saved === "todo" || saved === "auto") store.set({ destination: saved });
+  const check = async () => {
+    if (!store.get().enabled) return;
+    const res: { ok?: boolean; listening?: boolean } | undefined = await chrome.runtime
+      .sendMessage({ type: HEALTH_MESSAGE })
+      .catch(() => undefined);
+    const listening = !!(res?.ok && res.listening);
+    if (listening !== store.get().agentListening) store.set({ agentListening: listening });
+  };
+  void check();
+  window.setInterval(() => void check(), 10_000);
 }
 
 /** Polls the receiver for the agent's answer, then dismisses what it applied and flags what needs a decision. */

@@ -15,13 +15,14 @@ import {
   TOGGLE_MESSAGE,
   TOOLS_MESSAGE,
   isCommandMessage,
-  type CommandResult,
-} from "./shared/messages";
+  type CommandResult, HEALTH_MESSAGE, TODO_MESSAGE } from "./shared/messages";
 
 declare const __RECEIVER__: string;
 const RECEIVER_URL = `${__RECEIVER__}/markup`;
 const RESULT_URL = `${__RECEIVER__}/result/`;
 const ROUTE_URL = `${__RECEIVER__}/route`;
+const TODO_URL = `${__RECEIVER__}/todo`;
+const HEALTH_URL = `${__RECEIVER__}/health`;
 const ENABLED_KEY = "enabledTabs";
 const OPTED_OUT_KEY = "optedOutTabs";
 // Dev servers where Agent Markup turns itself on when the page loads. Deliberately
@@ -170,6 +171,35 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     fetch(RECEIVER_URL, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(msg.payload) })
       .then(async (r) => sendResponse(r.ok ? { ok: true, ...(await r.json()) } : { ok: false, error: `receiver replied ${r.status}` }))
       .catch(() => sendResponse({ ok: false, error: "receiver not running" }));
+    return true;
+  }
+  if (msg?.type === HEALTH_MESSAGE) {
+    fetch(HEALTH_URL)
+      .then(async (r) => sendResponse(r.ok ? await r.json() : { ok: false }))
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+  if (msg?.type === TODO_MESSAGE && sender.tab?.windowId !== undefined) {
+    // The screenshot goes with the to-do so the agent sees what was marked up.
+    const { id: tabId, windowId, url } = sender.tab;
+    const run = async () => {
+      let screenshot: string | undefined;
+      try {
+        if ((await chrome.tabs.get(tabId!)).active) screenshot = await chrome.tabs.captureVisibleTab(windowId, { format: "jpeg", quality: 85 });
+      } catch {
+        screenshot = undefined;
+      }
+      lastCaptureAt = Date.now();
+      const r = await fetch(TODO_URL, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ markup: msg.payload, screenshot, url }),
+      });
+      return r.ok ? { ok: true, ...(await r.json()) } : { ok: false, error: `receiver replied ${r.status}` };
+    };
+    const p = captureChain.then(run, run).catch(() => ({ ok: false, error: "receiver not running" }));
+    captureChain = p;
+    p.then(sendResponse);
     return true;
   }
   if (msg?.type === RESULT_MESSAGE) {

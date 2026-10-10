@@ -23,6 +23,10 @@ export const FRAMES_MESSAGE = "agent-markup:frames";
 export const FRAMES_DELETE_MESSAGE = "agent-markup:frames-delete";
 /** Content -> background: deliver a route (with frames) to the local receiver. */
 export const ROUTE_SEND_MESSAGE = "agent-markup:route-send";
+/** Content -> background: screenshot the tab and file the review as a to-do through the receiver. */
+export const TODO_MESSAGE = "agent-markup:todo";
+/** Content -> background: is the receiver up, and is an agent waiting for reviews? */
+export const HEALTH_MESSAGE = "agent-markup:health";
 /** Any client -> background: get tool definitions. */
 export const TOOLS_MESSAGE = "agent-markup:get-tool-definitions";
 

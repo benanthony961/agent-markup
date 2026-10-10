@@ -31,6 +31,10 @@ export interface State {
   sync: Record<string, { state: "sent" | "needs-call"; note?: string }>;
   /** Send automatically after a pause in editing. */
   autoSend: boolean;
+  /** Where Send goes: an agent waiting on the receiver, a to-do in AIM Text Bridge, or whichever fits. */
+  destination: "auto" | "agent" | "todo";
+  /** An agent is waiting on the receiver for reviews (checked while Agent Markup is on). */
+  agentListening: boolean;
   /** "markup" edits the page; "route" records a click-through for a walkthrough video. */
   mode: "markup" | "route";
   /** The route being recorded on this site, if any. */
@@ -63,6 +67,8 @@ class Store {
     toast: null,
     sync: {},
     autoSend: false,
+    destination: "auto",
+    agentListening: false,
     mode: "markup",
     route: null,
     recording: false,
