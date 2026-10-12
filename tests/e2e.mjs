@@ -106,7 +106,9 @@ try {
   await page.click("#trial", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Note']").click();
+  await page.evaluate(() => (window.__docKeys = 0));
   await page.keyboard.type("Use our brand color");
+  check("typing in a note never reaches the page's capture-phase key handlers", (await page.evaluate(() => window.__docKeys)) === 0, String(await page.evaluate(() => window.__docKeys)));
   await page.keyboard.press("ControlOrMeta+Enter");
   await page.waitForTimeout(50);
   check("note shows a numbered pin", (await root.locator(".pin").count()) === 1, await root.locator(".pin").textContent());

@@ -23,7 +23,30 @@ export function ensureRoot(): ShadowRoot {
   for (const type of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "keydown", "keyup", "keypress", "input", "wheel", "focusin", "focusout", "contextmenu"]) {
     host.addEventListener(type, (e) => e.stopPropagation());
   }
+  // That only stops bubbling. A page that listens for keys in the capture phase
+  // (a global shortcut registry, usually on document) still sees every key typed
+  // into our note box, and from outside a closed shadow root it looks like a key
+  // pressed on the host, not in a text field. So typing "e.g., " fired AIM's
+  // "g ," shortcut and navigated to Settings. Window capture runs before
+  // document capture: stop the key there, and hand our own UI a copy that
+  // can't leave the shadow root. The key's default action (typing the
+  // character) still happens unless one of our handlers prevents it.
+  for (const type of ["keydown", "keyup", "keypress"]) {
+    window.addEventListener(type, containKey, true);
+  }
   return root;
+}
+
+function containKey(e: Event) {
+  if (!(e instanceof KeyboardEvent) || !e.isTrusted || !isOurEvent(e)) return;
+  const target = e.composedPath()[0];
+  e.stopPropagation();
+  const copy = new KeyboardEvent(e.type, {
+    key: e.key, code: e.code, location: e.location, repeat: e.repeat, isComposing: e.isComposing,
+    ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
+    bubbles: true, cancelable: true, composed: false,
+  });
+  if (!target.dispatchEvent(copy)) e.preventDefault();
 }
 
 export function mountHost() {
