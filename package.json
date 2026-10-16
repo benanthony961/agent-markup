@@ -1,7 +1,7 @@
 {
   "license": "MIT",
   "name": "agent-markup",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "private": true,
   "description": "Visually edit any live website and copy a precise prompt for your coding agent.",
   "type": "module",

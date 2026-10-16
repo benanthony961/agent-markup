@@ -103,12 +103,32 @@ try {
   check("remove hides live but keeps element in DOM", (await page.locator(".hero-subtitle").count()) === 1 && !(await page.locator(".hero-subtitle").isVisible()));
 
   // Note
+  // Like an open Radix modal (Dialog/Sheet): a focus trap on document that pulls
+  // focus back into its container whenever focus leaves for somewhere outside it.
+  await page.evaluate(() => {
+    const container = document.body;
+    const trigger = document.querySelector("#trial");
+    trigger.setAttribute("tabindex", "0");
+    trigger.focus();
+    let last = trigger;
+    window.__trap = {
+      focusin: (e) => { if (container.contains(e.target)) last = e.target; else last.focus(); },
+      focusout: (e) => { if (e.relatedTarget && !container.contains(e.relatedTarget)) last.focus(); },
+    };
+    document.addEventListener("focusin", window.__trap.focusin);
+    document.addEventListener("focusout", window.__trap.focusout);
+  });
   await page.click("#trial", { force: true, modifiers: ["Shift"] });
   await page.waitForTimeout(40);
   await root.locator(".bar button[title='Note']").click();
   await page.evaluate(() => (window.__docKeys = 0));
   await page.keyboard.type("Use our brand color");
   check("typing in a note never reaches the page's capture-phase key handlers", (await page.evaluate(() => window.__docKeys)) === 0, String(await page.evaluate(() => window.__docKeys)));
+  check("a page focus trap (open modal) doesn't steal focus from the note box", (await root.locator(".note textarea, textarea").first().inputValue()) === "Use our brand color", await root.locator("textarea").first().inputValue());
+  await page.evaluate(() => {
+    document.removeEventListener("focusin", window.__trap.focusin);
+    document.removeEventListener("focusout", window.__trap.focusout);
+  });
   await page.keyboard.press("ControlOrMeta+Enter");
   await page.waitForTimeout(50);
   check("note shows a numbered pin", (await root.locator(".pin").count()) === 1, await root.locator(".pin").textContent());

@@ -34,7 +34,19 @@ export function ensureRoot(): ShadowRoot {
   for (const type of ["keydown", "keyup", "keypress"]) {
     window.addEventListener(type, containKey, true);
   }
+  // An open modal on the page (a Radix Dialog or Sheet) traps focus: when the
+  // element it holds fires focusout toward something outside its container, it
+  // focuses that element again. Our note box is outside every page container,
+  // so clicking into it bounced focus straight back and typing went nowhere.
+  // That focusout fires on the page's element, so the host's bubble guard never
+  // sees it. Hide it from the page when focus is moving into our UI.
+  window.addEventListener("focusout", containFocusMove, true);
   return root;
+}
+
+function containFocusMove(e: Event) {
+  if (!(e instanceof FocusEvent) || !host || e.relatedTarget !== host || isOurEvent(e)) return;
+  e.stopImmediatePropagation();
 }
 
 function containKey(e: Event) {
