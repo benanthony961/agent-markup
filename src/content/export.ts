@@ -2,7 +2,7 @@
 // export (markup.ts) to the local receiver, falling back to a file in
 // Downloads; tracks what has been sent; and reads the agent's answer back.
 // The read-only page bridge lives in bridge.ts.
-import { HEALTH_MESSAGE, RESULT_MESSAGE, SEND_MESSAGE, TODO_MESSAGE } from "../shared/messages";
+import { HEALTH_MESSAGE, RESULT_MESSAGE, SEND_MESSAGE, TODO_CAPTURED_MESSAGE, TODO_MESSAGE, TODO_STATUS_MESSAGE } from "../shared/messages";
 import { serialize, type Change } from "./changes";
 import { downloadText } from "./download";
 import { buildMarkup, markupFilename, type Markup } from "./markup";
@@ -29,6 +29,14 @@ const unsent = () => session.changes().filter((c) => sentSignature.get(c.id) !==
 const toast = (text: string) => store.set({ toast: { text, at: Date.now() } });
 const plural = (n: number) => `${n} change${n === 1 ? "" : "s"}`;
 
+/** Shows a send's progress on the Send button; a finished state clears itself. */
+let statusTimer = 0;
+function setSendStatus(status: NonNullable<ReturnType<typeof store.get>["sendStatus"]>) {
+  clearTimeout(statusTimer);
+  store.set({ sendStatus: status });
+  if (status.kind !== "busy") statusTimer = window.setTimeout(() => store.set({ sendStatus: null }), status.kind === "error" ? 8000 : 4000);
+}
+
 interface AgentResult {
   results?: { number: number; status: "applied" | "needs-call"; note?: string }[];
 }
@@ -41,6 +49,7 @@ export function effectiveDestination(s = store.get()): "agent" | "todo" {
 
 /** Sends the changes not sent yet, to a waiting agent or as a to-do. */
 export async function sendAndTrack(): Promise<void> {
+  if (store.get().sendStatus?.kind === "busy") return;
   const pending = unsent();
   if (!pending.length) return toast("Nothing new to send");
   if (effectiveDestination() === "todo") return sendAsTodo(pending);
@@ -66,26 +75,54 @@ export async function sendAndTrack(): Promise<void> {
  */
 async function sendAsTodo(pending: Change[]): Promise<void> {
   const payload = buildMarkup(pending);
-  // Our own UI is hidden for the screenshot, as for route frames.
+  setSendStatus({ label: "Taking screenshot…", kind: "busy" });
+  // Our own UI is hidden for the screenshot, as for route frames. The background
+  // says when the shot is taken, so progress shows again while the to-do is filed.
+  const onCaptured = (msg: { type?: string }) => {
+    if (msg?.type !== TODO_CAPTURED_MESSAGE) return;
+    setHostHidden(false);
+    setSendStatus({ label: "Filing to-do…", kind: "busy" });
+  };
+  chrome.runtime.onMessage.addListener(onCaptured);
   setHostHidden(true);
-  let res: { ok?: boolean; error?: string } | undefined;
+  let res: { ok?: boolean; error?: string; name?: string } | undefined;
   try {
     await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
     res = await chrome.runtime.sendMessage({ type: TODO_MESSAGE, payload }).catch(() => undefined);
   } finally {
+    chrome.runtime.onMessage.removeListener(onCaptured);
     setHostHidden(false);
   }
   if (!res?.ok) {
     // No receiver: keep the review rather than lose it.
     const filename = markupFilename();
     downloadText(filename, JSON.stringify(payload, null, 2));
-    return toast("Receiver off: saved to Downloads");
+    return setSendStatus({ label: "Receiver off: saved to Downloads", kind: "error", help: "Start the Agent Markup receiver, then send again." });
   }
   for (const c of pending) sentSignature.set(c.id, signature(c));
   const sync = { ...store.get().sync };
   for (const c of pending) sync[c.id] = { state: "sent" };
   store.set({ sync });
-  toast(`Filed ${plural(pending.length)} as a to-do`);
+  if (!res.name) return setSendStatus({ label: `Filed ${plural(pending.length)} as a to-do`, kind: "done" });
+  setSendStatus({ label: "Waiting for AIM Text Bridge…", kind: "busy" });
+  await awaitTodoPickup(res.name, pending.length);
+}
+
+/** Follows a filed to-do until AIM Text Bridge picks it up (it then starts an Orca agent on it). */
+async function awaitTodoPickup(name: string, count: number): Promise<void> {
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const r: { ok?: boolean; state?: string; status?: number } | undefined = await chrome.runtime
+      .sendMessage({ type: TODO_STATUS_MESSAGE, name, wait: 15 })
+      .catch(() => undefined);
+    // An older receiver has no status route: the to-do is filed, we just can't follow it.
+    if (!r?.ok) return setSendStatus({ label: `Filed ${plural(count)} as a to-do`, kind: "done" });
+    if (r.state === "picked-up") return setSendStatus({ label: "To-do filed, agent starting", kind: "done" });
+  }
+  setSendStatus({
+    label: "Filed, not picked up yet",
+    kind: "error",
+    help: "AIM Text Bridge hasn’t taken the to-do after 30s. Is it running? It files the to-do when it next opens.",
+  });
 }
 
 // ---- Destination -------------------------------------------------------------

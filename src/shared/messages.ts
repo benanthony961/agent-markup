@@ -25,6 +25,10 @@ export const FRAMES_DELETE_MESSAGE = "agent-markup:frames-delete";
 export const ROUTE_SEND_MESSAGE = "agent-markup:route-send";
 /** Content -> background: screenshot the tab and file the review as a to-do through the receiver. */
 export const TODO_MESSAGE = "agent-markup:todo";
+/** Background -> content: the to-do screenshot is taken, so our UI can show again. */
+export const TODO_CAPTURED_MESSAGE = "agent-markup:todo-captured";
+/** Content -> background: has AIM Text Bridge picked up a filed to-do yet? (parks up to `wait` seconds) */
+export const TODO_STATUS_MESSAGE = "agent-markup:todo-status";
 /** Content -> background: is the receiver up, and is an agent waiting for reviews? */
 export const HEALTH_MESSAGE = "agent-markup:health";
 /** Any client -> background: get tool definitions. */

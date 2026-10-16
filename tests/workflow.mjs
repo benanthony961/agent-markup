@@ -1,8 +1,11 @@
 // End-to-end checks for the agent workflow features: categories, phrase
 // highlights, the structured export, "Send to agent" and the read-only bridge.
 // Run: bun run test:workflow
+import { spawn } from "node:child_process";
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, renameSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { launch } from "./harness.mjs";
 
 const html = readFileSync(new URL("./fixtures/landing.html", import.meta.url));
@@ -10,6 +13,7 @@ const server = createServer((_req, res) => res.writeHead(200, { "content-type": 
 const url = `http://localhost:${server.address().port}/landing`;
 
 let failures = 0;
+let receiver;
 const check = (name, cond, extra = "") => {
   console.log(`${cond ? "✓" : "✗"} ${name}${extra ? ` — ${extra}` : ""}`);
   if (!cond) failures++;
@@ -130,12 +134,34 @@ try {
   await cmd("undo");
   const afterUndo = (await cmd("list_changes")).data.filter((c) => c.type === "highlight").length;
   check("undo removes the last highlight", afterUndo === 1, String(afterUndo));
+
+  // ---- Send as to-do shows its progress on the button ----
+  const todos = mkdtempSync(join(tmpdir(), "am-todos-"));
+  receiver = spawn("node", ["scripts/receiver.mjs"], {
+    env: { ...process.env, AGENT_MARKUP_PORT: "47899", AGENT_MARKUP_TODOS: todos, AGENT_MARKUP_INBOX: join(todos, "inbox"), AGENT_MARKUP_ROUTES: join(todos, "routes") },
+    stdio: "ignore",
+  });
+  await new Promise((r) => setTimeout(r, 400));
+  await cmd("add_note", { elementId: h1.elementId, note: "Bigger", category: "wording" });
+  const sendBtn = root.locator(".panel .send");
+  await sendBtn.click();
+  await sendBtn.locator("text=Waiting for AIM Text Bridge").waitFor({ timeout: 5000 });
+  check("to-do send shows it is waiting for AIM Text Bridge", (await sendBtn.getAttribute("aria-busy")) === "true" && (await sendBtn.isDisabled()));
+  const [filed] = readdirSync(todos).filter((d) => d.startsWith("localhost"));
+  check("receiver saved the to-do", !!filed, readdirSync(todos).join(","));
+  // AIM Text Bridge moves the folder away when it files the to-do.
+  renameSync(join(todos, filed), join(tmpdir(), `${filed}-picked`));
+  await sendBtn.locator("text=To-do filed, agent starting").waitFor({ timeout: 5000 });
+  check("button confirms once AIM Text Bridge picks it up", (await sendBtn.getAttribute("class")).includes("done"));
+  await page.waitForTimeout(4300);
+  check("confirmation clears back to the Send label", (await sendBtn.textContent()).includes("Send as to-do"), await sendBtn.textContent());
 } catch (err) {
   failures++;
   console.error(err);
 } finally {
   await context.close();
   server.close();
+  receiver?.kill();
 }
 console.log(failures ? `\n${failures} check(s) failed` : "\nAll checks passed");
 process.exit(failures ? 1 : 0);
