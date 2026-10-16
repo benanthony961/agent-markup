@@ -15,7 +15,7 @@ import {
   TOGGLE_MESSAGE,
   TOOLS_MESSAGE,
   isCommandMessage,
-  type CommandResult, HEALTH_MESSAGE, TODO_MESSAGE } from "./shared/messages";
+  type CommandResult, HEALTH_MESSAGE, TODO_CAPTURED_MESSAGE, TODO_MESSAGE, TODO_STATUS_MESSAGE } from "./shared/messages";
 
 declare const __RECEIVER__: string;
 const RECEIVER_URL = `${__RECEIVER__}/markup`;
@@ -190,6 +190,8 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         screenshot = undefined;
       }
       lastCaptureAt = Date.now();
+      // The page hides our UI for the screenshot; it can show progress again now.
+      void chrome.tabs.sendMessage(tabId!, { type: TODO_CAPTURED_MESSAGE }).catch(() => {});
       const r = await fetch(TODO_URL, {
         method: "POST",
         headers: { "content-type": "application/json" },
@@ -200,6 +202,12 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     const p = captureChain.then(run, run).catch(() => ({ ok: false, error: "receiver not running" }));
     captureChain = p;
     p.then(sendResponse);
+    return true;
+  }
+  if (msg?.type === TODO_STATUS_MESSAGE && typeof msg.name === "string") {
+    fetch(`${TODO_URL}/${encodeURIComponent(msg.name)}?wait=${Number(msg.wait) || 0}`)
+      .then(async (r) => sendResponse(r.ok ? await r.json() : { ok: false, status: r.status }))
+      .catch(() => sendResponse({ ok: false, status: 0 }));
     return true;
   }
   if (msg?.type === RESULT_MESSAGE) {

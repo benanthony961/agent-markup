@@ -245,12 +245,15 @@ export function createPanel() {
     setDisabled(undoBtn, !s.canUndo);
     setDisabled(redoBtn, !s.canRedo);
     setDisabled(clearBtn, n === 0);
-    setDisabled(sendBtn, n === 0);
+    const status = s.sendStatus;
+    setDisabled(sendBtn, n === 0 || status?.kind === "busy");
     destSelect.value = s.destination;
     const toTodo = effectiveDestination(s) === "todo";
+    for (const kind of ["busy", "done", "error"] as const) sendBtn.classList.toggle(kind, status?.kind === kind);
+    sendBtn.setAttribute("aria-busy", String(status?.kind === "busy"));
     sendBtn.replaceChildren(
-      h("span", { class: "send-icon", html: ICONS.send }),
-      h("span", {}, toTodo ? "Send as to-do" : "Send to agent"),
+      h("span", { class: "send-icon", html: status ? { busy: ICONS.spinner, done: ICONS.check, error: ICONS.warn }[status.kind] : ICONS.send }),
+      h("span", {}, status?.label ?? (toTodo ? "Send as to-do" : "Send to agent")),
     );
     sendBtn.title = toTodo
       ? "File these changes as a to-do in AIM Text Bridge, with a screenshot; an Orca agent starts on it (⌘⇧Enter)."
@@ -263,8 +266,9 @@ export function createPanel() {
       h("span", {}, copyState?.label ?? "Copy prompt"),
       copyState ? "" : h("span", { class: "copy-count" }, String(n)),
     );
-    copyHelp.textContent = copyState?.help ?? "";
-    copyHelp.classList.toggle("show", !!copyState?.help);
+    const help = copyState?.help ?? (status?.kind === "error" ? status.help : undefined);
+    copyHelp.textContent = help ?? "";
+    copyHelp.classList.toggle("show", !!help);
     if (undoOffer && s.changes !== undoOffer.after) dismissUndo();
 
     const offerKey = undoOffer ? undoOffer.timer : 0;

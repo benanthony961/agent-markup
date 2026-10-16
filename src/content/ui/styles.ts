@@ -309,6 +309,13 @@ kbd {
 .panel .send { margin: 6px 8px 0; height: 32px; font-size: 12px; font-weight: 600; }
 .panel .copy.error, .panel .copy.error svg { color: var(--color-danger-ink); }
 .panel .copy.error { background: var(--color-danger); }
+.panel .send-icon { display: flex; }
+.panel .send.busy { cursor: progress; }
+.panel .send.done, .panel .send.done svg { color: var(--color-ink); }
+.panel .send.error, .panel .send.error svg { color: var(--color-danger); }
+.spin { animation: am-spin .8s linear infinite; }
+@keyframes am-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation-duration: 2.4s; } }
 .panel .copy-help { display: none; padding: 6px 12px 0; color: var(--color-danger); font-size: 12px; line-height: 1.4; }
 .panel .copy-help.show { display: block; }
 .panel .foot { display: flex; align-items: center; gap: 5px; padding: 8px 12px 11px; color: var(--color-ink-3); font-size: 11.5px; }

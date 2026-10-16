@@ -13,7 +13,7 @@
 import { createServer } from "node:http";
 import { existsSync, mkdirSync, readFileSync, watch, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 
 const PORT = Number(process.env.AGENT_MARKUP_PORT ?? 47800);
 const INBOX = process.env.AGENT_MARKUP_INBOX ?? join(homedir(), ".agent-markup", "inbox");
@@ -66,6 +66,20 @@ const server = createServer((req, res) => {
     const item = { resolve: (name) => (clearTimeout(item.timer), newReviewWaiters.delete(item), reply(200, { ok: true, name })) };
     return park(newReviewWaiters, item, 60_000, () => reply(200, { ok: true, name: null }));
   }
+  // /todo/<name>?wait=N: has AIM Text Bridge picked up a filed to-do? It moves the folder
+  // out of TODOS when it files it, so "picked-up" means the folder is gone. Parks up to N
+  // seconds (max 25) waiting for that.
+  const todoStatus = req.method === "GET" && req.url?.match(/^\/todo\/([a-z0-9._-]+)(?:\?wait=(\d+))?$/i);
+  if (todoStatus) {
+    const folder = join(TODOS, todoStatus[1]);
+    const deadline = Date.now() + Math.min(Number(todoStatus[2] ?? 0), 25) * 1000;
+    const check = () => {
+      if (!existsSync(folder)) return reply(200, { ok: true, state: "picked-up" });
+      if (Date.now() >= deadline || res.destroyed) return reply(200, { ok: true, state: "waiting" });
+      setTimeout(check, 400);
+    };
+    return check();
+  }
   const isRoute = req.method === "POST" && req.url === "/route";
   const isTodo = req.method === "POST" && req.url === "/todo";
   if (!isRoute && !isTodo && (req.method !== "POST" || req.url !== "/markup")) return reply(404, { ok: false });
@@ -117,7 +131,7 @@ function saveTodo(body, reply) {
   // Written last, so the app never reads a half-written to-do.
   writeFileSync(join(dir, "ready"), "");
   console.log(`received to-do (${markup.changes.length} change(s)) -> ${dir}`);
-  reply(200, { ok: true, dir, count: markup.changes.length });
+  reply(200, { ok: true, dir, name: basename(dir), count: markup.changes.length });
 }
 
 /** Writes a route as <dir>/route.json with each inlined frame decoded to <dir>/frames/<id>.jpg. */
