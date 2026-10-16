@@ -23,7 +23,42 @@ export function ensureRoot(): ShadowRoot {
   for (const type of ["click", "dblclick", "mousedown", "mouseup", "pointerdown", "pointerup", "keydown", "keyup", "keypress", "input", "wheel", "focusin", "focusout", "contextmenu"]) {
     host.addEventListener(type, (e) => e.stopPropagation());
   }
+  // That only stops bubbling. A page that listens for keys in the capture phase
+  // (a global shortcut registry, usually on document) still sees every key typed
+  // into our note box, and from outside a closed shadow root it looks like a key
+  // pressed on the host, not in a text field. So typing "e.g., " fired AIM's
+  // "g ," shortcut and navigated to Settings. Window capture runs before
+  // document capture: stop the key there, and hand our own UI a copy that
+  // can't leave the shadow root. The key's default action (typing the
+  // character) still happens unless one of our handlers prevents it.
+  for (const type of ["keydown", "keyup", "keypress"]) {
+    window.addEventListener(type, containKey, true);
+  }
+  // An open modal on the page (a Radix Dialog or Sheet) traps focus: when the
+  // element it holds fires focusout toward something outside its container, it
+  // focuses that element again. Our note box is outside every page container,
+  // so clicking into it bounced focus straight back and typing went nowhere.
+  // That focusout fires on the page's element, so the host's bubble guard never
+  // sees it. Hide it from the page when focus is moving into our UI.
+  window.addEventListener("focusout", containFocusMove, true);
   return root;
+}
+
+function containFocusMove(e: Event) {
+  if (!(e instanceof FocusEvent) || !host || e.relatedTarget !== host || isOurEvent(e)) return;
+  e.stopImmediatePropagation();
+}
+
+function containKey(e: Event) {
+  if (!(e instanceof KeyboardEvent) || !e.isTrusted || !isOurEvent(e)) return;
+  const target = e.composedPath()[0];
+  e.stopPropagation();
+  const copy = new KeyboardEvent(e.type, {
+    key: e.key, code: e.code, location: e.location, repeat: e.repeat, isComposing: e.isComposing,
+    ctrlKey: e.ctrlKey, shiftKey: e.shiftKey, altKey: e.altKey, metaKey: e.metaKey,
+    bubbles: true, cancelable: true, composed: false,
+  });
+  if (!target.dispatchEvent(copy)) e.preventDefault();
 }
 
 export function mountHost() {

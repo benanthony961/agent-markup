@@ -12,6 +12,8 @@ rmSync(outdir, { recursive: true, force: true });
 mkdirSync(`${outdir}/icons`, { recursive: true });
 
 const manifest = JSON.parse(readFileSync("src/manifest.json", "utf8"));
+// package.json is the one place the version lives; chrome://extensions shows it.
+manifest.version = JSON.parse(readFileSync("package.json", "utf8")).version;
 if (test) manifest.host_permissions = ["<all_urls>"];
 writeFileSync(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2));
 for (const size of [16, 32, 48, 128]) writeFileSync(`${outdir}/icons/icon${size}.png`, makeIcon(size));

@@ -55,5 +55,7 @@
   </section>
   <footer><p>© 2026 Acme Mail</p><a href="/privacy">Privacy</a></footer>
   <script>document.addEventListener("click", () => (window.__docClicks = (window.__docClicks || 0) + 1));</script>
+  <!-- Like an app's global shortcut registry: capture phase on document, so it runs before anything inside a shadow root. -->
+  <script>document.addEventListener("keydown", (e) => (window.__docKeys = (window.__docKeys || 0) + 1), true);</script>
 </body>
 </html>
